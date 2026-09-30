@@ -3,7 +3,7 @@
 Build native Windows apps in JavaScript. You describe the UI with a SwiftUI-style API, and Glasspane renders it with WinUI 3. Your code runs on Node.js inside the same process as the window, so `fs`, `fetch`, databases and npm packages work directly in event handlers.
 
 ```js
-const { App, state, VStack, HStack, Text, Button, TextField } = require('glasspane');
+const { App, state, VStack, HStack, Text, Button, TextField } = require('@cryptidblleh/glasspane');
 
 const count = state(0);
 const name = state('');
@@ -22,7 +22,7 @@ App('Counter', () =>
 ```
 
 ```
-npx glasspane app.js
+npx @cryptidblleh/glasspane app.js
 ```
 
 The window uses the Mica backdrop, your system accent color, light and dark themes, and the standard Fluent controls, so it looks like any other Windows 11 app.
@@ -32,8 +32,8 @@ The window uses the Mica backdrop, your system accent color, light and dark them
 You need Windows 10 1809 or newer (x64 or ARM64) and the [.NET SDK](https://dotnet.microsoft.com/download) 10 or newer. The SDK is only used once, to build the host executable the first time you run an app. After that, no .NET install is needed to run apps, because the host bundles its own runtime.
 
 ```
-npm install glasspane
-npx glasspane app.js
+npm install @cryptidblleh/glasspane
+npx @cryptidblleh/glasspane app.js
 ```
 
 `node app.js` works too. Node starts `Glasspane.exe`, passes it the script and exits, so Task Manager shows one process (Glasspane) with Node running inside it. Output from `console.log` still goes to the terminal, but the prompt returns right away because the app runs on its own, like any other GUI program.
@@ -102,7 +102,7 @@ Colors can be `'#RRGGBB'`, a name such as `'red'`, or a theme keyword (`'accent'
 ## Windows features
 
 ```js
-const { system } = require('glasspane');
+const { system } = require('@cryptidblleh/glasspane');
 
 await system.alert('Saved', { title: 'Done' });
 if (await system.confirm('Delete everything?')) { /* ... */ }

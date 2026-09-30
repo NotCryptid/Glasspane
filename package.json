@@ -1,6 +1,9 @@
 {
-  "name": "glasspane",
+  "name": "@cryptidblleh/glasspane",
   "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "Native WinUI 3 apps with a Node.js backend and a SwiftUI-style API.",
   "main": "lib/index.js",
   "types": "index.d.ts",
