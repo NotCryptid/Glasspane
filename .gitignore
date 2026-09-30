@@ -137,3 +137,15 @@ dist
 
 # MacOS
 .DS_Store
+# .NET host build output
+native/Host/bin/
+native/Host/obj/
+
+# Glasspane / tooling
+*.log
+.vs/
+*.user
+*.suo
+graphify-out/
+dist/
+*.tgz

@@ -1,0 +1,30 @@
+{
+  "name": "glasspane",
+  "version": "0.1.0",
+  "description": "Native WinUI 3 apps with a Node.js backend and a SwiftUI-style API.",
+  "main": "lib/index.js",
+  "types": "index.d.ts",
+  "os": [
+    "win32"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "scripts",
+    "index.d.ts",
+    "native/Host/*.cs",
+    "native/Host/*.csproj",
+    "native/Host/app.manifest"
+  ],
+  "scripts": {
+    "build:host": "node scripts/build-host.js",
+    "start": "glasspane examples/counter.js"
+  },
+  "license": "MIT",
+  "bin": {
+    "glasspane": "bin/glasspane.js"
+  }
+}
