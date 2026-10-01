@@ -1,6 +1,6 @@
 # glasspane
 
-Build native Windows apps in JavaScript. You describe the UI with a SwiftUI-style API, and Glasspane renders it with WinUI 3. Your code runs on Node.js inside the same process as the window, so `fs`, `fetch`, databases and npm packages work directly in event handlers.
+Build native Windows apps in JavaScript. You describe the UI with a SwiftUI-style API, and Glasspane renders it with WinUI 3. Your code runs on Node.js, so `fs`, `fetch`, databases and npm packages all work in event handlers.
 
 ```js
 const { App, state, VStack, HStack, Text, Button, TextField } = require('@cryptidbleh/glasspane');
@@ -12,7 +12,7 @@ App('Counter', () =>
   VStack(
     Text(`Count: ${count.value}`).font('largeTitle'),
     HStack(
-      Button('−', () => count.value--),
+      Button('-', () => count.value--),
       Button('+', () => count.value++).style('accent'),
     ),
     TextField('Your name', name),
@@ -25,18 +25,20 @@ App('Counter', () =>
 npx @cryptidbleh/glasspane app.js
 ```
 
-The window uses the Mica backdrop, your system accent color, light and dark themes, and the standard Fluent controls, so it looks like any other Windows 11 app.
+The window uses the Mica backdrop, your system accent color, light and dark themes, and the standard Fluent controls, so it looks like any other app on Windows 11.
 
 ## Install and run
 
-You need Windows 10 1809 or newer (x64 or ARM64) and the [.NET SDK](https://dotnet.microsoft.com/download) 10 or newer. The SDK is only used once, to build the host executable the first time you run an app. After that, no .NET install is needed to run apps, because the host bundles its own runtime.
+You need Windows 10 1809 or newer (x64 or ARM64), [Node.js](https://nodejs.org) 20 or newer, and the [.NET SDK](https://dotnet.microsoft.com/download) 10 or newer. The SDK is used once, to build the host executable the first time you run an app. After that you do not need .NET to run apps, because the host bundles its own runtime.
 
 ```
 npm install @cryptidbleh/glasspane
 npx @cryptidbleh/glasspane app.js
 ```
 
-`node app.js` works too. Node starts `Glasspane.exe`, passes it the script and exits, so Task Manager shows one process (Glasspane) with Node running inside it. Output from `console.log` still goes to the terminal, but the prompt returns right away because the app runs on its own, like any other GUI program.
+`node app.js` works too. It hands the script to `Glasspane.exe` and exits, so the app runs on its own like any other GUI program. Output from `console.log` still reaches the terminal, and the prompt returns right away.
+
+Glasspane uses whichever Node.js you have installed, so it is not pinned to one version. Set `GLASSPANE_NODE` to a specific `node.exe` to choose one. `pack` uses that same variable when it bundles a runtime.
 
 ## Packaging as an exe
 
@@ -44,11 +46,11 @@ npx @cryptidbleh/glasspane app.js
 npx glasspane pack app.js -n MyApp
 ```
 
-This writes `dist/MyApp/`, which holds `MyApp.exe`, the host runtime (WinUI and Node) and an `app/` copy of your project, including `node_modules`. Zip the folder and ship it. Users need neither Node nor .NET, and `MyApp.exe` runs on double-click.
+This writes `dist/MyApp/`, which holds `MyApp.exe`, the WinUI host, a copy of `node.exe`, and an `app/` copy of your project including `node_modules`. Zip the folder and ship it. Users need neither Node nor .NET, and `MyApp.exe` runs on a double-click.
 
 Options: `-o <dir>` sets the output folder, `-n <name>` sets the exe name (default: `productName` or `name` from package.json), and `-i <file.ico>` sets the icon.
 
-The result is a folder, not a single file, because WinUI and `libnode.dll` have to sit next to the exe. Run `npm install --omit=dev` in your project first so dev dependencies stay out of the package.
+The result is a folder because WinUI and the Node runtime have to sit next to the exe. The bundled `node.exe` is about 90 MB, which is most of the folder. Run `npm install --omit=dev` in your project first so dev dependencies stay out of the package.
 
 ### Icons
 
@@ -70,24 +72,34 @@ Editing exe icons uses `rcedit`, which only works on Windows.
 
 ## How it works
 
-The host, `Glasspane.exe`, is a WinUI 3 program that embeds Node.js 20 as a library (`libnode.dll`) on a background thread. The window and your JavaScript share one process and pass messages as in-memory strings.
+`Glasspane.exe` is a WinUI 3 program. It starts a stock `node.exe` as a child process, and the two
+talk over stdin and stdout using newline-delimited JSON. Nothing is embedded, so any current Node.js
+release works.
 
 ```
-Glasspane.exe
-├── UI thread    WinUI 3 controls
-└── Node thread  your script and npm packages
+Glasspane.exe            your app runs in a child process
+├── UI thread            WinUI 3 controls
+└── node.exe             your script, npm packages, fs, fetch
+        ⇅ newline-delimited JSON over stdin/stdout
 ```
 
-Your `body` function returns a description of the UI. It runs again whenever a `state` changes or an event handler finishes. The host compares the new description with the controls it already has and updates only what differs, so focus, caret position and scroll position survive a re-render.
+Every message carries a window id, so the host routes it to the right native window. Since stdout is
+the protocol channel, `console.log` and everything else the app prints goes to stderr, which the host
+forwards to the terminal. Writing to stdout directly is ignored with a warning.
 
-Node comes from the host, so users do not need it installed to run a finished app. Native `.node` addons have not been tested in the embedded runtime.
+Your `body` function returns a description of the UI. It runs again whenever a `state` changes or an
+event handler finishes, but only for the windows that read that state. The host compares the new
+description with the controls it already has and updates only what differs, so focus, caret position
+and scroll position survive a re-render.
+
+`pack` copies `node.exe` next to your app, so a finished app needs nothing installed.
 
 ## State and bindings
 
 ```js
 const text = state('');
 text.value = 'hi';              // re-renders
-text.update(s => s + '!');      // updater function; mutating an object and returning nothing also works
+text.update(s => s + '!');      // updater function; you can also mutate an object and return nothing
 ```
 
 Pass a `state` to an input and the two stay in sync, like SwiftUI's `$binding`:
@@ -110,7 +122,7 @@ For a one-way value, pass a plain value and add `.onChange(fn)`. `Binding(get, s
 | Input | `Button` `TextField` `SecureField` `TextEditor` `Toggle` `Checkbox` `Slider` `Stepper` `Picker` |
 | Helpers | `ForEach(items, render)` for keyed lists, `Native(type, props, ...children)` |
 
-Stacks accept a props object first, as in `VStack({ spacing: 12, alignment: 'leading' }, ...)`. The same options exist as modifiers. `Spacer()` and `.flex()` split the space left over in a stack.
+Stacks accept a props object first, as in `VStack({ spacing: 12, alignment: 'leading' }, ...)`. The same options exist as modifiers. `Spacer()` and `.flex()` split whatever space is left in a stack.
 
 ## Modifiers
 
@@ -125,7 +137,7 @@ Modifiers chain and each returns a new view.
 
 `font` takes a preset (`'largeTitle'`, `'title'`, `'title2'`, `'title3'`, `'headline'`, `'body'`, `'caption'`, `'mono'`), a size, or `{ size, weight, italic, family }`.
 
-Colors can be `'#RRGGBB'`, a name such as `'red'`, or a theme keyword (`'accent'`, `'primary'`, `'secondary'`, `'card'`, `'danger'`, and a few more) that follows light and dark mode.
+Colors can be `'#RRGGBB'`, a name such as `'red'`, or a theme keyword like `'accent'`, `'primary'`, `'secondary'`, `'card'` or `'danger'`. Theme keywords follow light and dark mode.
 
 `foreground`, `font` and `disabled` set on a container apply to its children unless they set their own. `padding` sits inside the background and `margin` outside it.
 
@@ -168,12 +180,41 @@ Native('RatingControl', { Value: 3 }).on('ValueChanged', v => save(v))
 glasspane examples/counter.js   # state, buttons, text field, toggle, slider
 glasspane examples/todo.js      # keyed lists, Enter to submit, dialogs, save picker
 glasspane examples/gallery.js   # every control, Native views, ZStack
+glasspane examples/windows.js   # several windows, shared state, per-window dialogs
 ```
+
+## Several windows
+
+Call `App()` more than once to open more windows. Each one keeps its own UI tree, state and window
+settings, and the process stays alive until the last one closes.
+
+```js
+const main = App('Notes', () => Text('Main window'));
+
+const win = App({ title: 'Settings', width: 480, height: 360 }, () =>
+  VStack(Text('Preferences'), Button('Close', () => win.close())).spacing(12).padding(24)
+);
+
+// Dialogs and window settings are per-window, so call them on the handle:
+await win.confirm('Save changes?');
+win.window.title = 'Settings (unsaved)';
+
+// `system` without a window applies to whichever one is focused.
+system.window.title = 'Notes';
+```
+
+`App()` returns that window's handle. Use `win.window` for its settings, `win.alert(...)` and the
+rest of the dialog API bound to it, and `win.close()` to close it. `system.windowOf(win)` gives you
+the same scoped API if you prefer to pass it around.
+
+Closing the main window leaves the others running. `system.quit()` closes every window.
 
 ## Limits
 
-- One window per process.
-- A render error shows its stack trace in the window instead of leaving it blank.
-- The embedded runtime is Node 20.18, the newest `libnode` build Microsoft publishes.
-- `'accent'` used as a text color is resolved when the app starts and does not follow later theme changes.
-- TypeScript definitions ship in `index.d.ts`.
+- Node.js runs as a child process rather than inside the host, so Task Manager shows two entries
+  while an app runs. That is the trade for not being pinned to one Node version.
+- stdout belongs to the protocol, so `console.log` is routed to stderr. A library that writes to
+  `process.stdout` directly is ignored with a warning instead of corrupting the message stream.
+- A finished app is a folder rather than a single file, and the bundled `node.exe` is about 90 MB.
+
+TypeScript definitions ship in `index.d.ts`.

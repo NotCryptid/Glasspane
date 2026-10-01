@@ -11,6 +11,17 @@ using WinRT.Interop;
 
 namespace Glasspane.Host;
 
+/// <summary>One native window plus the reconciler that keeps its control tree in sync.</summary>
+sealed class HostWindow
+{
+    public Window Window = null!;
+    public Grid Root = null!;
+    public Reconciler Reconciler = null!;
+    public bool Shown;
+    public long Sent, Acked;
+    public string? LastBackdrop, LastSize, LastIcon;
+}
+
 public sealed class HostApp : Application, IXamlMetadataProvider
 {
     // A code-only app has no generated metadata provider; WinUI's control resources need one.
@@ -22,24 +33,10 @@ public sealed class HostApp : Application, IXamlMetadataProvider
     [DllImport("user32.dll")] static extern uint GetDpiForWindow(IntPtr hwnd);
 
     readonly DispatcherQueue _ui = DispatcherQueue.GetForCurrentThread();
-    readonly Reconciler _reconciler;
-    Window? _window;
-    Grid? _root;
-    bool _shown;
-    long _sent, _acked;
-    string? _lastBackdrop, _lastSize, _lastIcon;
+    readonly Dictionary<long, HostWindow> _windows = new();
 
     public HostApp()
     {
-
-        _reconciler = new Reconciler((id, value) =>
-        {
-            _sent++;
-            var msg = new JsonObject { ["type"] = "event", ["id"] = id, ["seq"] = _sent };
-            if (value != null) msg["value"] = value.DeepClone();
-            Bridge.Send(msg);
-        });
-
         UnhandledException += (_, e) =>
         {
             Bridge.Log("unhandled: " + e.Exception);
@@ -51,69 +48,106 @@ public sealed class HostApp : Application, IXamlMetadataProvider
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
         Resources.MergedDictionaries.Add(new XamlControlsResources());
-        _window = new Window();
-        _root = (Grid)XamlReader.Load(
-            "<Grid xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
-            "Background=\"Transparent\"/>");
-        _window.Content = _root;
-        _window.Closed += (_, _) =>
-        {
-            Bridge.Send(new JsonObject { ["type"] = "closed" });
-            Environment.Exit(0);
-        };
         Bridge.Start(_ui, Launch.Script, Launch.Args, Handle);
     }
+
+    static long Id(JsonObject msg) => (long)(J.Num(msg, "window") ?? 0);
 
     void Handle(JsonObject msg)
     {
         switch (J.Str(msg, "type"))
         {
-            case "hello": Bridge.Send(new JsonObject { ["type"] = "ready" }); break;
+            case "hello":
+            {
+                var id = Id(msg);
+                if (!_windows.ContainsKey(id)) CreateWindow(id);
+                Bridge.Send(new JsonObject { ["type"] = "ready", ["window"] = id });
+                break;
+            }
             case "render": Render(msg); break;
             case "request": _ = HandleRequest(msg); break;
-            case "quit": _window?.Close(); Environment.Exit(0); break;
+            case "close": CloseWindow(Id(msg)); break;
+            case "quit": Environment.Exit(0); break;
         }
+    }
+
+    void CreateWindow(long id)
+    {
+        var hw = new HostWindow();
+        hw.Window = new Window();
+        hw.Root = (Grid)XamlReader.Load(
+            "<Grid xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
+            "Background=\"Transparent\"/>");
+        hw.Window.Content = hw.Root;
+        // Events are namespaced by window id in JS, but routing explicitly keeps the mapping explicit.
+        hw.Reconciler = new Reconciler((handlerId, value) =>
+        {
+            hw.Sent++;
+            var msg = new JsonObject { ["type"] = "event", ["window"] = id, ["id"] = handlerId, ["seq"] = hw.Sent };
+            if (value != null) msg["value"] = value.DeepClone();
+            Bridge.Send(msg);
+        });
+        hw.Window.Closed += (_, _) =>
+        {
+            _windows.Remove(id);
+            Bridge.Send(new JsonObject { ["type"] = "closed", ["window"] = id });
+            // Keep running while other windows are open; JS exits when the last one closes.
+        };
+        // The host owns focus, so `system.*` without a window follows the window the user is in.
+        hw.Window.Activated += (_, e) =>
+        {
+            if (e.WindowActivationState != WindowActivationState.Deactivated)
+                Bridge.Send(new JsonObject { ["type"] = "focus", ["window"] = id });
+        };
+        _windows[id] = hw;
+    }
+
+    void CloseWindow(long id)
+    {
+        if (_windows.Remove(id, out var hw)) hw.Window.Close();
     }
 
     void Render(JsonObject msg)
     {
-        _acked = (long)(J.Num(msg, "ack") ?? 0);
-        _reconciler.HoldInputs = _acked < _sent;
+        var id = Id(msg);
+        if (!_windows.TryGetValue(id, out var hw)) { CreateWindow(id); hw = _windows[id]; }
+        hw.Acked = (long)(J.Num(msg, "ack") ?? 0);
+        hw.Reconciler.HoldInputs = hw.Acked < hw.Sent;
         try
         {
-            if (msg["window"] is JsonObject w) ApplyWindow(w);
+            if (msg["config"] is JsonObject w) ApplyWindow(hw, w);
             if (msg["root"] is JsonObject tree)
             {
-                var next = _reconciler.Reconcile(_root!.Children.FirstOrDefault(), tree);
-                if (!ReferenceEquals(_root.Children.FirstOrDefault(), next))
+                var next = hw.Reconciler.Reconcile(hw.Root.Children.FirstOrDefault(), tree);
+                if (!ReferenceEquals(hw.Root.Children.FirstOrDefault(), next))
                 {
-                    _root.Children.Clear();
-                    _root.Children.Add(next);
+                    hw.Root.Children.Clear();
+                    hw.Root.Children.Add(next);
                 }
             }
         }
         catch (Exception e)
         {
             Bridge.Log("render failed: " + e);
-            Bridge.Send(new JsonObject { ["type"] = "error", ["message"] = e.Message });
+            Bridge.Send(new JsonObject { ["type"] = "error", ["window"] = id, ["message"] = e.Message });
         }
-        if (!_shown) { _shown = true; _window!.Activate(); }
+        if (!hw.Shown) { hw.Shown = true; hw.Window.Activate(); }
     }
 
-    void ApplyWindow(JsonObject w)
+    void ApplyWindow(HostWindow hw, JsonObject w)
     {
-        var win = _window!;
+        var win = hw.Window;
         if (J.Str(w, "title") is { } title && win.Title != title) win.Title = title;
 
         var size = $"{J.Num(w, "width")}x{J.Num(w, "height")}";
-        if (size != _lastSize && J.Num(w, "width") is { } width && J.Num(w, "height") is { } height)
+        if (size != hw.LastSize && J.Num(w, "width") is { } width && J.Num(w, "height") is { } height)
         {
-            _lastSize = size;
+            hw.LastSize = size;
             var hwnd = WindowNative.GetWindowHandle(win);
             var scale = GetDpiForWindow(hwnd) / 96.0;
             var aw = win.AppWindow;
             aw.Resize(new Windows.Graphics.SizeInt32((int)(width * scale), (int)(height * scale)));
-            if (!_shown)
+            if (!hw.Shown)
             {
                 var area = DisplayArea.GetFromWindowId(aw.Id, DisplayAreaFallback.Nearest).WorkArea;
                 aw.Move(new Windows.Graphics.PointInt32(
@@ -123,22 +157,22 @@ public sealed class HostApp : Application, IXamlMetadataProvider
         }
 
         var icon = J.Str(w, "icon");
-        if (icon != _lastIcon)
+        if (icon != hw.LastIcon)
         {
-            _lastIcon = icon;
+            hw.LastIcon = icon;
             try { if (icon != null) win.AppWindow.SetIcon(icon); }
             catch (Exception e) { Bridge.Log("icon failed: " + e.Message); }
         }
 
-        _root!.RequestedTheme = J.Str(w, "theme") switch
+        hw.Root.RequestedTheme = J.Str(w, "theme") switch
         {
             "dark" => ElementTheme.Dark, "light" => ElementTheme.Light, _ => ElementTheme.Default,
         };
 
         var backdrop = J.Str(w, "backdrop") ?? "mica";
-        if (backdrop != _lastBackdrop)
+        if (backdrop != hw.LastBackdrop)
         {
-            _lastBackdrop = backdrop;
+            hw.LastBackdrop = backdrop;
             win.SystemBackdrop = backdrop switch
             {
                 "mica" => new MicaBackdrop(),
@@ -146,7 +180,7 @@ public sealed class HostApp : Application, IXamlMetadataProvider
                 "acrylic" => new DesktopAcrylicBackdrop(),
                 _ => null,
             };
-            _root!.Background = backdrop == "none"
+            hw.Root.Background = backdrop == "none"
                 ? (Brush)XamlReader.Load("<SolidColorBrush xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Color=\"{ThemeResource SolidBackgroundFillColorBase}\"/>")
                 : null;
         }
@@ -155,10 +189,13 @@ public sealed class HostApp : Application, IXamlMetadataProvider
     async Task HandleRequest(JsonObject msg)
     {
         var id = msg["id"]?.DeepClone();
-        var reply = new JsonObject { ["type"] = "response", ["id"] = id };
+        var window = Id(msg);
+        var reply = new JsonObject { ["type"] = "response", ["window"] = window, ["id"] = id };
         try
         {
-            reply["result"] = await Dialogs.Invoke(_window!, J.Str(msg, "method") ?? "", msg["args"] as JsonObject ?? new JsonObject());
+            // Dialogs and pickers must be parented to the window that asked for them.
+            if (!_windows.TryGetValue(window, out var hw)) throw new InvalidOperationException("Unknown window.");
+            reply["result"] = await Dialogs.Invoke(hw.Window, J.Str(msg, "method") ?? "", msg["args"] as JsonObject ?? new JsonObject());
         }
         catch (Exception e)
         {

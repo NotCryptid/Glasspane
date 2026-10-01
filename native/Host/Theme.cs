@@ -50,10 +50,17 @@ static class Theme
         Brush? b = null;
         if (Keywords.TryGetValue(spec, out var res))
         {
-            // Only exists as a brush; resolved for the theme the app started with.
-            if (forText && spec.Equals("accent", StringComparison.OrdinalIgnoreCase)
-                && Application.Current.Resources["AccentTextFillColorPrimaryBrush"] is Brush accentText)
-                return Cache[cacheKey] = accentText;
+            // WinUI exposes AccentTextFillColorPrimary only as a brush (there is no
+            // AccentTextFillColorPrimary color key), so the generic {ThemeResource <color>} path
+            // below cannot reach it. Its definition is
+            //     <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush"
+            //                        Color="{ThemeResource SystemAccentColorLight3}" />   (Light)
+            //                        Color="{ThemeResource SystemAccentColorDark2}" />    (Dark)
+            // Reading that brush out of Application.Current.Resources materialises a copy against
+            // the startup theme and freezes it. Binding to the color instead keeps the theme
+            // reference inside the brush, so WinUI re-resolves it when the theme changes.
+            if (forText && spec.Equals("accent", StringComparison.OrdinalIgnoreCase))
+                res = "SystemAccentColorLight3";
             b = (Brush)XamlReader.Load(
                 "<SolidColorBrush xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
                 $"Color=\"{{ThemeResource {res}}}\"/>");

@@ -1,6 +1,6 @@
 {
   "name": "@cryptidbleh/glasspane",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publishConfig": {
     "access": "public"
   },
@@ -11,7 +11,7 @@
     "win32"
   ],
   "engines": {
-    "node": ">=18"
+    "node": ">=20"
   },
   "files": [
     "bin",
@@ -24,7 +24,8 @@
   ],
   "scripts": {
     "build:host": "node scripts/build-host.js",
-    "start": "glasspane examples/counter.js"
+    "start": "glasspane examples/counter.js",
+    "test": "node test/run.js"
   },
   "license": "MIT",
   "bin": {

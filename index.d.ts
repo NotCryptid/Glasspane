@@ -129,10 +129,8 @@ export interface WindowOptions {
   icon?: string;
 }
 
-export function App(title: string, body: () => Child): void;
-export function App(options: WindowOptions, body: () => Child): void;
-
-export const system: {
+/** The `system` API. On the global `system`, calls act on the focused window. */
+export interface SystemApi {
   alert(message: string, opts?: { title?: string; buttons?: string[] }): Promise<number>;
   confirm(message: string, opts?: { title?: string; ok?: string; cancel?: string }): Promise<boolean>;
   openFile(opts?: { extensions?: string[]; multiple?: false }): Promise<string | null>;
@@ -141,7 +139,27 @@ export const system: {
   pickFolder(): Promise<string | null>;
   clipboard: { read(): Promise<string | null>; write(text: string): Promise<void> };
   launch(uri: string): Promise<boolean>;
+  /** Closes every window. The process exits once the last one is gone. */
   quit(): void;
-  /** Live window settings: `system.window.title = 'Saved'`. */
+  /** Live window settings: `system.window.title = 'Saved'`. Affects the focused window. */
   window: WindowOptions;
+}
+
+/** One window, as returned by `App()`. Its `system` calls are bound to that window. */
+export interface AppWindow extends SystemApi {
+  /** Numeric id used to route messages to this window. */
+  readonly id: number;
+  /** This window's own settings. */
+  window: WindowOptions;
+  /** Close just this window. The process stays alive while others are open. */
+  close(): void;
+}
+
+/** Opens a window. Call it more than once for a multi-window app. */
+export function App(title: string, body: () => Child): AppWindow;
+export function App(options: WindowOptions, body: () => Child): AppWindow;
+
+export const system: SystemApi & {
+  /** The `system` API bound to one window: `system.windowOf(win).confirm(...)`. */
+  windowOf(win: AppWindow): SystemApi;
 };

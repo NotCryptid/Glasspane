@@ -9,7 +9,7 @@ App({ title: 'Counter', width: 480, height: 560 }, () =>
   VStack(
     Text(`Count: ${count.value}`).font('largeTitle'),
     HStack(
-      Button('−', () => count.value--).width(48),
+      Button('-', () => count.value--).width(48),
       Button('Reset', () => { count.value = 0; }),
       Button('+', () => count.value++).style('accent').width(48),
     ),
