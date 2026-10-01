@@ -46,7 +46,24 @@ npx glasspane pack app.js -n MyApp
 
 This writes `dist/MyApp/` containing `MyApp.exe`, the host runtime (WinUI, Node) and an `app/` copy of your project, including `node_modules`. Zip the folder and ship it. Users need neither Node nor .NET. Double-click `MyApp.exe` to run it. Options: `-o <dir>` for the output folder and `-n <name>` for the exe name (default: `productName` or `name` from package.json).
 
-It is a folder, not a single file. WinUI and `libnode.dll` have to sit next to the exe. Run `npm install --omit=dev` in your project first so dev dependencies are not shipped. The packaged exe has the default icon.
+It is a folder, not a single file. WinUI and `libnode.dll` have to sit next to the exe. Run `npm install --omit=dev` in your project first so dev dependencies are not shipped. 
+### Icons
+
+An icon is an `.ico` file (include 16, 32, 48 and 256 px sizes). Set it when packaging:
+
+```
+npx glasspane pack app.js -n MyApp -i icon.ico
+```
+
+or once in `package.json`, which `pack` reads: `"glasspane": { "icon": "icon.ico" }`. To change the icon of an exe you already packaged:
+
+```
+npx glasspane icon dist/MyApp/MyApp.exe new.ico
+```
+
+That sets the file icon (Explorer, taskbar pin, shortcuts). While developing with `glasspane app.js`, or to change it at runtime, use the window option: `App({ title: 'Notes', icon: 'icon.ico' }, body)` or `system.window.icon = 'other.ico'`. Relative paths are resolved from your script's folder.
+
+Icon editing uses `rcedit` and only works on Windows.
 
 ## How it works
 

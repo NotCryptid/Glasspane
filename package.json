@@ -29,5 +29,8 @@
   "license": "MIT",
   "bin": {
     "glasspane": "bin/glasspane.js"
+  },
+  "dependencies": {
+    "rcedit": "^4.0.1"
   }
 }
