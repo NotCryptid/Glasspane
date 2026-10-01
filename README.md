@@ -38,6 +38,16 @@ npx @cryptidbleh/glasspane app.js
 
 `node app.js` works too. Node starts `Glasspane.exe`, passes it the script and exits, so Task Manager shows one process (Glasspane) with Node running inside it. Output from `console.log` still goes to the terminal, but the prompt returns right away because the app runs on its own, like any other GUI program.
 
+## Packaging as an exe
+
+```
+npx glasspane pack app.js -n MyApp
+```
+
+This writes `dist/MyApp/` containing `MyApp.exe`, the host runtime (WinUI, Node) and an `app/` copy of your project, including `node_modules`. Zip the folder and ship it. Users need neither Node nor .NET. Double-click `MyApp.exe` to run it. Options: `-o <dir>` for the output folder and `-n <name>` for the exe name (default: `productName` or `name` from package.json).
+
+It is a folder, not a single file. WinUI and `libnode.dll` have to sit next to the exe. Run `npm install --omit=dev` in your project first so dev dependencies are not shipped. The packaged exe has the default icon.
+
 ## How it works
 
 The host, `Glasspane.exe`, is a WinUI 3 program that embeds Node.js 20 as a library (`libnode.dll`) on a background thread. The window and your JavaScript share one process and pass messages as in-memory strings.
