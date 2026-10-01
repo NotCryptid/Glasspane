@@ -125,6 +125,8 @@ export interface WindowOptions {
   height?: number;
   backdrop?: 'mica' | 'micaAlt' | 'acrylic' | 'none';
   theme?: 'system' | 'light' | 'dark';
+  /** Path to an .ico file for the title bar and taskbar, relative to your script. */
+  icon?: string;
 }
 
 export function App(title: string, body: () => Child): void;

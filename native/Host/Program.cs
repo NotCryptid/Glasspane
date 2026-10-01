@@ -16,11 +16,24 @@ public static class Program
     {
         if (args.Length == 0)
         {
-            Console.Error.WriteLine("usage: Glasspane <script.js> [args...]");
-            Environment.Exit(2);
+            // Packaged app: `glasspane pack` writes glasspane.json next to the exe.
+            var cfg = Path.Combine(AppContext.BaseDirectory, "glasspane.json");
+            var main = File.Exists(cfg)
+                ? System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(cfg))?["main"]?.GetValue<string>()
+                : null;
+            if (main == null)
+            {
+                Console.Error.WriteLine("usage: Glasspane <script.js> [args...]");
+                Environment.Exit(2);
+            }
+            Launch.Script = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, main));
+            Launch.Args = Array.Empty<string>();
         }
-        Launch.Script = Path.GetFullPath(args[0]);
-        Launch.Args = args.Skip(1).ToArray();
+        else
+        {
+            Launch.Script = Path.GetFullPath(args[0]);
+            Launch.Args = args.Skip(1).ToArray();
+        }
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Application.Start(_ =>
         {

@@ -38,6 +38,36 @@ npx @cryptidbleh/glasspane app.js
 
 `node app.js` works too. Node starts `Glasspane.exe`, passes it the script and exits, so Task Manager shows one process (Glasspane) with Node running inside it. Output from `console.log` still goes to the terminal, but the prompt returns right away because the app runs on its own, like any other GUI program.
 
+## Packaging as an exe
+
+```
+npx glasspane pack app.js -n MyApp
+```
+
+This writes `dist/MyApp/`, which holds `MyApp.exe`, the host runtime (WinUI and Node) and an `app/` copy of your project, including `node_modules`. Zip the folder and ship it. Users need neither Node nor .NET, and `MyApp.exe` runs on double-click.
+
+Options: `-o <dir>` sets the output folder, `-n <name>` sets the exe name (default: `productName` or `name` from package.json), and `-i <file.ico>` sets the icon.
+
+The result is a folder, not a single file, because WinUI and `libnode.dll` have to sit next to the exe. Run `npm install --omit=dev` in your project first so dev dependencies stay out of the package.
+
+### Icons
+
+Icons are `.ico` files. Include 16, 32, 48 and 256 px sizes. Set one when packaging:
+
+```
+npx glasspane pack app.js -n MyApp -i icon.ico
+```
+
+or set it once in `package.json`, which `pack` reads: `"glasspane": { "icon": "icon.ico" }`. To change the icon of an exe you already packaged:
+
+```
+npx glasspane icon dist/MyApp/MyApp.exe new.ico
+```
+
+That changes the file icon shown in Explorer, pinned taskbar entries and shortcuts. To set the title bar and taskbar icon while developing with `glasspane app.js`, or to change it at runtime, use the window option: `App({ title: 'Notes', icon: 'icon.ico' }, body)` or `system.window.icon = 'other.ico'`. Relative paths resolve from your script's folder.
+
+Editing exe icons uses `rcedit`, which only works on Windows.
+
 ## How it works
 
 The host, `Glasspane.exe`, is a WinUI 3 program that embeds Node.js 20 as a library (`libnode.dll`) on a background thread. The window and your JavaScript share one process and pass messages as in-memory strings.

@@ -27,7 +27,7 @@ public sealed class HostApp : Application, IXamlMetadataProvider
     Grid? _root;
     bool _shown;
     long _sent, _acked;
-    string? _lastBackdrop, _lastSize;
+    string? _lastBackdrop, _lastSize, _lastIcon;
 
     public HostApp()
     {
@@ -120,6 +120,14 @@ public sealed class HostApp : Application, IXamlMetadataProvider
                     area.X + (area.Width - (int)(width * scale)) / 2,
                     area.Y + (area.Height - (int)(height * scale)) / 2));
             }
+        }
+
+        var icon = J.Str(w, "icon");
+        if (icon != _lastIcon)
+        {
+            _lastIcon = icon;
+            try { if (icon != null) win.AppWindow.SetIcon(icon); }
+            catch (Exception e) { Bridge.Log("icon failed: " + e.Message); }
         }
 
         _root!.RequestedTheme = J.Str(w, "theme") switch
