@@ -215,6 +215,5 @@ Closing the main window leaves the others running. `system.quit()` closes every 
   while an app runs. That is the trade for not being pinned to one Node version.
 - stdout belongs to the protocol, so `console.log` is routed to stderr. A library that writes to
   `process.stdout` directly is ignored with a warning instead of corrupting the message stream.
-- A finished app is a folder rather than a single file, and the bundled `node.exe` is about 90 MB.
 
 TypeScript definitions ship in `index.d.ts`.
