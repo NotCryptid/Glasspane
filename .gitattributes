@@ -1,3 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
-examples/counter.js linguist-documentation
+test/cases/handler-ids-are-namespaced-per-window.js linguist-vendored
+test/cases/events-route-to-the-window-that-raised-them.js linguist-vendored
