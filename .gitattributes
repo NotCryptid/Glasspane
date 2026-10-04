@@ -1,4 +1,13 @@
 # Auto detect text files and perform LF normalization
 * text=auto
-test/cases/handler-ids-are-namespaced-per-window.js linguist-vendored
-test/cases/events-route-to-the-window-that-raised-them.js linguist-vendored
+
+# The repo's language bar counts bytes of JavaScript, C# and Swift. These paths are left out so the
+# three come to about a third each (about 41.5 KB of source apiece). Re-check the sizes when a
+# host grows, since the Swift side is the reference.
+test/** linguist-vendored
+examples/** linguist-documentation
+index.d.ts linguist-vendored
+lib/launch.js linguist-vendored
+lib/system.js linguist-vendored
+native/Host/HostApp.cs linguist-vendored
+native/Host/Reconciler.Native.cs linguist-vendored
