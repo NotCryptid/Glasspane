@@ -38,6 +38,7 @@ final class HostWindow: NSObject, NSWindowDelegate {
     }
 }
 
+@MainActor
 final class HostApp: NSObject, NSApplicationDelegate {
     let bridge = Bridge()
     private var windows: [Int: HostWindow] = [:]
@@ -135,8 +136,9 @@ final class HostApp: NSObject, NSApplicationDelegate {
         let wid = intValue(msg["window"]) ?? 0
         let method = msg["method"] as? String ?? ""
         let args = msg["args"] as? JSONDict ?? [:]
-        var reply: JSONDict = ["type": "response", "window": wid, "id": msg["id"] ?? NSNull()]
+        let id: Any = msg["id"] ?? NSNull()
         Task {
+            var reply: JSONDict = ["type": "response", "window": wid, "id": id]
             do {
                 guard let hw = self.windows[wid] else { throw HostError("Unknown window.") }
                 reply["result"] = try await Dialogs.invoke(window: hw.window, method: method, args: args)

@@ -16,6 +16,8 @@ const BRIDGE = path.join(__dirname, '..', 'lib', 'bridge.js');
  * @param {(bridge, sent) => void} run  called once the bridge exists, to define the app
  */
 function createHost() {
+  // Tests stand in for the host, so the runtime must not try to launch a real one (it would on macOS).
+  process.env.GLASSPANE_HOSTED = '1';
   const sent = [];
   const realWrite = fs.writeSync;
   const realStdoutWrite = process.stdout.write;
