@@ -46,7 +46,7 @@ const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g
   await test('a circular prop does not blank the window');
   await test('stdout stays clean when user code writes to it');
   await test('the process exits when the last window closes');
-  await test('system picks and loads by platform');
+  await test('system reports the platform');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

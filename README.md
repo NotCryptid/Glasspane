@@ -199,19 +199,15 @@ Native('RatingControl', { Value: 3 }).on('ValueChanged', v => save(v))
 
 ## Platform differences in your code
 
-`system.platform` is `'windows'` or `'macos'`. `system.pick` returns the value for the current platform:
+`system.platform` is `'windows'` or `'macos'`. For small differences, branch on it. For bigger ones, keep one file per platform and require the right one:
 
 ```js
-const mod = system.pick({ windows: 'Ctrl', macos: '\u2318' });
-const label = system.pick({ macos: 'Reveal in Finder', default: 'Show in Explorer' });
-```
-
-When the differences are bigger, keep one file per platform and let `system.load` choose. `system.load('./shell')` loads `shell.windows.js` or `shell.macos.js` and falls back to `shell.js` if there is no file for the current platform. The path is relative to your main script's folder, and `pack` includes all of the files.
-
-```js
-const shell = system.load('./platform/shell');
+const mod = system.platform === 'macos' ? '\u2318' : 'Ctrl';
+const shell = require(`./platform/shell.${system.platform}`);
 Button(shell.revealLabel, () => shell.reveal(file));
 ```
+
+`pack` copies the whole project, so every platform's file is included.
 
 ## Examples
 
@@ -220,7 +216,7 @@ glasspane examples/counter.js   # state, buttons, text field, toggle, slider
 glasspane examples/todo.js      # keyed lists, Enter to submit, dialogs, save picker
 glasspane examples/gallery.js   # every control, Native views, ZStack
 glasspane examples/windows.js   # several windows, shared state, per-window dialogs
-glasspane examples/platform.js  # system.platform and a separate file per OS
+glasspane examples/platform.js  # system.platform and one file per OS
 ```
 
 ## Several windows

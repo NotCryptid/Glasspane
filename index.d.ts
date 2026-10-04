@@ -162,13 +162,6 @@ export function App(options: WindowOptions, body: () => Child): AppWindow;
 export const system: SystemApi & {
   /** The OS the app is running on. */
   readonly platform: 'windows' | 'macos';
-  /** Returns the entry for this platform, or `default` when there is none. */
-  pick<T>(choices: { windows?: T; macos?: T; default?: T }): T | undefined;
-  /**
-   * Loads `<base>.windows.js` or `<base>.macos.js`, falling back to `<base>.js`. `base` is relative
-   * to your main script's folder.
-   */
-  load<T = any>(base: string): T;
   /** The `system` API bound to one window: `system.windowOf(win).confirm(...)`. */
   windowOf(win: AppWindow): SystemApi;
 };
