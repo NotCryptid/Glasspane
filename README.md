@@ -1,6 +1,6 @@
 # glasspane
 
-Build native Windows apps in JavaScript. You describe the UI with a SwiftUI-style API, and Glasspane renders it with WinUI 3. Your code runs on Node.js, so `fs`, `fetch`, databases and npm packages all work in event handlers.
+Build native desktop apps in JavaScript. You describe the UI with a SwiftUI-style API, and Glasspane renders it with WinUI 3 on Windows and SwiftUI on macOS. Your code runs on Node.js, so `fs`, `fetch`, databases and npm packages all work in event handlers.
 
 ```js
 const { App, state, VStack, HStack, Text, Button, TextField } = require('@cryptidbleh/glasspane');
@@ -25,7 +25,7 @@ App('Counter', () =>
 npx @cryptidbleh/glasspane app.js
 ```
 
-The window uses the Mica backdrop, your system accent color, light and dark themes, and the standard Fluent controls, so it looks like any other app on Windows 11.
+On Windows the window uses the Mica backdrop, your system accent color, light and dark themes, and the standard Fluent controls. On macOS it is a real SwiftUI window with system controls, colors and vibrancy. The same script runs on both.
 
 ## Install and run
 
@@ -39,6 +39,27 @@ npx @cryptidbleh/glasspane app.js
 `node app.js` works too. It hands the script to `Glasspane.exe` and exits, so the app runs on its own like any other GUI program. Output from `console.log` still reaches the terminal, and the prompt returns right away.
 
 Glasspane uses whichever Node.js you have installed, so it is not pinned to one version. Set `GLASSPANE_NODE` to a specific `node.exe` to choose one. `pack` uses that same variable when it bundles a runtime.
+
+## macOS
+
+You need macOS 13 or newer, [Node.js](https://nodejs.org) 20 or newer, and Xcode or the Command Line Tools (`xcode-select --install`, Swift 5.9 or newer). Swift is used once, to build the host the first time you run an app.
+
+```
+npm install @cryptidbleh/glasspane
+npx @cryptidbleh/glasspane app.js
+npx glasspane pack app.js -n MyApp      # writes dist/MyApp.app
+```
+
+`pack` produces a `.app` bundle holding the SwiftUI host, a copy of `node` and your project. It is signed ad hoc, which is enough to run on the Mac that built it. To give it to other people you still need to sign with a Developer ID and notarize it, which Glasspane does not do. Bundle the `node` from nodejs.org (set `GLASSPANE_NODE`), because a Homebrew `node` links libraries other Macs do not have. Icons are `.icns` (or a `.png`, converted with `sips`), and `--id com.you.app` sets the bundle identifier.
+
+Differences from Windows:
+
+- `Native(...)` names a WinUI control, so it renders nothing on macOS (its children still show). Build with the normal views if the app needs to run on both.
+- `backdrop` maps to a vibrancy material (`'mica'`, `'micaAlt'` and `'acrylic'` each get a different one), and `'none'` is the plain window color.
+- `flex(n)` takes a share of the leftover space but the weight `n` is ignored; competing flex views split it equally.
+- Fonts: `'mono'` uses the system monospaced font, and other Windows font names such as `'Segoe UI'` fall back to the system font if they are not installed. Button `icon` takes a Windows symbol name (`'Add'`, `'Delete'`, `'Save'`...) or any SF Symbol name.
+- `window.icon` sets the Dock icon, since a Mac window has none of its own.
+- `system.launch()` opens URLs with the default app. `ms-settings:` and other Windows protocols do nothing.
 
 ## Packaging as an exe
 
@@ -72,7 +93,7 @@ Editing exe icons uses `rcedit`, which only works on Windows.
 
 ## How it works
 
-`Glasspane.exe` is a WinUI 3 program. It starts a stock `node.exe` as a child process, and the two
+On Windows, `Glasspane.exe` is a WinUI 3 program. On macOS it is a SwiftUI app that speaks the same protocol. Either one starts a stock `node.exe` as a child process, and the two
 talk over stdin and stdout using newline-delimited JSON. Nothing is embedded, so any current Node.js
 release works.
 
@@ -211,7 +232,7 @@ Closing the main window leaves the others running. `system.quit()` closes every 
 
 ## Limits
 
-- Node.js runs as a child process rather than inside the host, so Task Manager shows two entries
+- Node.js runs as a child process rather than inside the host, so Task Manager (Activity Monitor on macOS) shows two entries
   while an app runs. That is the trade for not being pinned to one Node version.
 - stdout belongs to the protocol, so `console.log` is routed to stderr. A library that writes to
   `process.stdout` directly is ignored with a warning instead of corrupting the message stream.

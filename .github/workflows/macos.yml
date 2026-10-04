@@ -1,0 +1,26 @@
+name: macOS host
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts || npm install --ignore-scripts
+      - run: npm test
+      - name: Build the SwiftUI host
+        run: npm run build:host
+      - name: Pack an example
+        run: node bin/glasspane.js pack examples/counter.js -n Counter
+      - name: Packed app has everything it needs
+        run: |
+          test -x dist/Counter.app/Contents/MacOS/Counter
+          test -x dist/Counter.app/Contents/Resources/node
+          test -f dist/Counter.app/Contents/Info.plist

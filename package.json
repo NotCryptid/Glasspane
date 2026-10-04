@@ -4,11 +4,12 @@
   "publishConfig": {
     "access": "public"
   },
-  "description": "WinUI for JavaScript",
+  "description": "Native apps in JavaScript: WinUI on Windows, SwiftUI on macOS",
   "main": "lib/index.js",
   "types": "index.d.ts",
   "os": [
-    "win32"
+    "win32",
+    "darwin"
   ],
   "engines": {
     "node": ">=20"
@@ -20,7 +21,9 @@
     "index.d.ts",
     "native/Host/*.cs",
     "native/Host/*.csproj",
-    "native/Host/app.manifest"
+    "native/Host/app.manifest",
+    "native/MacHost/Package.swift",
+    "native/MacHost/Sources"
   ],
   "scripts": {
     "build:host": "node scripts/build-host.js",

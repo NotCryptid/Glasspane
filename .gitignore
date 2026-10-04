@@ -5,6 +5,10 @@ node_modules/
 native/Host/bin/
 native/Host/obj/
 
+# Swift host build output. The built host comes from `npm run build:host`.
+native/MacHost/.build/
+native/MacHost/bin/
+
 # Packaged apps from `glasspane pack`
 dist/
 

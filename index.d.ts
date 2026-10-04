@@ -116,7 +116,7 @@ export function Image(source: string, opts?: { fit?: 'fit' | 'fill' | 'cover' | 
 export function List<T>(items: T[], render: (item: T, index: number) => Child, opts?: { key?: (item: T, i: number) => string | number }): View;
 export function List(...children: Child[]): View;
 export function ForEach<T>(items: T[], render: (item: T, index: number) => View | string, opts?: { key?: (item: T, i: number) => string | number }): View[];
-/** Any WinUI control by type name, e.g. Native('Expander', { Header: 'More' }, child). */
+/** Any WinUI control by type name, e.g. Native('Expander', { Header: 'More' }, child). Windows only: it renders nothing on macOS. */
 export function Native(type: string, props?: Record<string, unknown>, ...children: Child[]): View;
 
 export interface WindowOptions {
@@ -125,7 +125,7 @@ export interface WindowOptions {
   height?: number;
   backdrop?: 'mica' | 'micaAlt' | 'acrylic' | 'none';
   theme?: 'system' | 'light' | 'dark';
-  /** Path to an .ico file for the title bar and taskbar, relative to your script. */
+  /** Path to an .ico file for the title bar and taskbar (Windows), or an image for the Dock icon (macOS), relative to your script. */
   icon?: string;
 }
 
