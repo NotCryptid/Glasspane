@@ -45,7 +45,8 @@ function createHost() {
     process.stdout.write = realStdoutWrite;
   };
 
-  return {
+  // Arrow functions below have no `this` of their own, so they reach each other through `host`.
+  const host = {
     bridge,
     sent,    /** Every render message, in order. */
     renders: () => sent.filter((m) => m.type === 'render'),
@@ -55,16 +56,17 @@ function createHost() {
     /** Delivers a message as if the host had sent it. */
     fromHost: (msg) => bridge.receive(JSON.stringify(msg)),
     /** Finds a button by label and returns its click handler id. */
-    button: (w, label) => buttonId(this.last(w) && this.last(w).root, label),
+    button: (w, label) => buttonId(host.last(w) && host.last(w).root, label),
     /** Clicks a button by label, the way the host would on a real click. */
     click: (w, label) => {
-      const id = this.button(w, label);
+      const id = host.button(w, label);
       if (!id) throw new Error(`No button labelled ${JSON.stringify(label)} in window ${w}`);
-      this.fromHost({ type: 'event', window: w, id, seq: ++seq });
+      host.fromHost({ type: 'event', window: w, id, seq: ++seq });
       return id;
     },
     restore,
   };
+  return host;
 }
 
 let seq = 0;
