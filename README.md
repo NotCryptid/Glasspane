@@ -25,11 +25,11 @@ App('Counter', () =>
 npx @cryptidbleh/glasspane app.js
 ```
 
-On Windows the window uses the Mica backdrop, your system accent color, light and dark themes, and the standard Fluent controls. On macOS it is a real SwiftUI window with system controls, colors and vibrancy. The same script runs on both.
+On Windows the window uses the Mica backdrop, your system accent color, light and dark themes, and the standard Fluent controls. On macOS it is a SwiftUI window with system controls, colors and vibrancy. The same script runs on both.
 
-## Install and run
+## Windows
 
-You need Windows 10 1809 or newer (x64 or ARM64), [Node.js](https://nodejs.org) 20 or newer, and the [.NET SDK](https://dotnet.microsoft.com/download) 10 or newer. The SDK is used once, to build the host executable the first time you run an app. After that you do not need .NET to run apps, because the host bundles its own runtime.
+You need Windows 10 1809 or newer (x64 or ARM64), [Node.js](https://nodejs.org) 20 or newer, and the [.NET SDK](https://dotnet.microsoft.com/download) 10 or newer. The first time you run an app, the SDK builds the host executable. After that you can run apps without .NET, because the host bundles its own runtime.
 
 ```
 npm install @cryptidbleh/glasspane
@@ -42,7 +42,7 @@ Glasspane uses whichever Node.js you have installed, so it is not pinned to one 
 
 ## macOS
 
-You need macOS 13 or newer, [Node.js](https://nodejs.org) 20 or newer, and Xcode or the Command Line Tools (`xcode-select --install`, Swift 5.9 or newer). Swift is used once, to build the host the first time you run an app.
+You need macOS 13 or newer, [Node.js](https://nodejs.org) 20 or newer, and Xcode or the Command Line Tools (`xcode-select --install`, Swift 5.9 or newer). The first time you run an app, Swift builds the host.
 
 ```
 npm install @cryptidbleh/glasspane
@@ -50,18 +50,18 @@ npx @cryptidbleh/glasspane app.js
 npx glasspane pack app.js -n MyApp      # writes dist/MyApp.app
 ```
 
-`pack` produces a `.app` bundle holding the SwiftUI host, a copy of `node` and your project. It is signed ad hoc, which is enough to run on the Mac that built it. To give it to other people you still need to sign with a Developer ID and notarize it, which Glasspane does not do. Bundle the `node` from nodejs.org (set `GLASSPANE_NODE`), because a Homebrew `node` links libraries other Macs do not have. Icons are `.icns` (or a `.png`, converted with `sips`), and `--id com.you.app` sets the bundle identifier.
+`pack` writes a `.app` bundle with the SwiftUI host, a copy of `node` and your project. The bundle is signed ad hoc, which is enough to run on the Mac that built it. Before you give it to other people, sign it with a Developer ID and notarize it. Glasspane does neither. Bundle the `node` from nodejs.org (set `GLASSPANE_NODE`), because a Homebrew `node` links libraries that other Macs lack. Icons are `.icns` files, or a `.png` that `pack` converts with `sips`. `--id com.you.app` sets the bundle identifier.
 
 Differences from Windows:
 
-- `Native(...)` names a WinUI control, so it renders nothing on macOS (its children still show). Build with the normal views if the app needs to run on both.
-- `backdrop` maps to a vibrancy material (`'mica'`, `'micaAlt'` and `'acrylic'` each get a different one), and `'none'` is the plain window color.
-- `flex(n)` takes a share of the leftover space but the weight `n` is ignored; competing flex views split it equally.
-- Fonts: `'mono'` uses the system monospaced font, and other Windows font names such as `'Segoe UI'` fall back to the system font if they are not installed. Button `icon` takes a Windows symbol name (`'Add'`, `'Delete'`, `'Save'`...) or any SF Symbol name.
-- `window.icon` sets the Dock icon, since a Mac window has none of its own.
-- `system.launch()` opens URLs with the default app. `ms-settings:` and other Windows protocols do nothing.
+- `Native(...)` names a WinUI control, so it renders nothing on macOS, though its children still show. Use the regular views if the app has to run on both.
+- `backdrop` maps to a vibrancy material. `'mica'`, `'micaAlt'` and `'acrylic'` each get a different one, and `'none'` is the plain window color.
+- `flex(n)` takes a share of the leftover space, but it ignores the weight `n`. Competing flex views split the space equally.
+- `'mono'` uses the system monospaced font. Other Windows font names, such as `'Segoe UI'`, fall back to the system font. A button's `icon` takes a Windows symbol name (`'Add'`, `'Delete'`, `'Save'`) or any SF Symbol name.
+- A Mac window has no icon of its own, so `window.icon` sets the Dock icon.
+- `system.launch()` opens URLs in the default app. Windows protocols such as `ms-settings:` do nothing.
 
-## Packaging as an exe
+## Packaging on Windows
 
 ```
 npx glasspane pack app.js -n MyApp
@@ -93,7 +93,7 @@ Editing exe icons uses `rcedit`, which only works on Windows.
 
 ## How it works
 
-On Windows, `Glasspane.exe` is a WinUI 3 program. On macOS it is a SwiftUI app that speaks the same protocol. Either one starts a stock `node.exe` as a child process, and the two
+On Windows, `Glasspane.exe` is a WinUI 3 program. On macOS it is a SwiftUI app that speaks the same protocol. Either one starts a stock Node.js as a child process, and the two
 talk over stdin and stdout using newline-delimited JSON. Nothing is embedded, so any current Node.js
 release works.
 
@@ -113,7 +113,7 @@ event handler finishes, but only for the windows that read that state. The host 
 description with the controls it already has and updates only what differs, so focus, caret position
 and scroll position survive a re-render.
 
-`pack` copies `node.exe` next to your app, so a finished app needs nothing installed.
+`pack` bundles Node.js with your app, so a finished app needs nothing installed.
 
 ## State and bindings
 
@@ -162,7 +162,7 @@ Colors can be `'#RRGGBB'`, a name such as `'red'`, or a theme keyword like `'acc
 
 `foreground`, `font` and `disabled` set on a container apply to its children unless they set their own. `padding` sits inside the background and `margin` outside it.
 
-## Windows features
+## System features
 
 ```js
 const { system } = require('@cryptidbleh/glasspane');
@@ -177,22 +177,40 @@ system.window.title = 'Untitled (saved)';
 system.quit();
 ```
 
+These work on both platforms.
+
 Window options go in the first argument to `App`:
 
 ```js
 App({ title: 'Notes', width: 900, height: 640, backdrop: 'mica', theme: 'system' }, body)
 ```
 
-`backdrop` is `'mica'`, `'micaAlt'`, `'acrylic'` or `'none'`. `theme` is `'system'`, `'light'` or `'dark'`, and you can change it at runtime through `system.window.theme`.
+`backdrop` is `'mica'`, `'micaAlt'`, `'acrylic'` or `'none'`, and `theme` is `'system'`, `'light'` or `'dark'`, and you can change it at runtime through `system.window.theme`.
 
 ## Any WinUI control
 
-A control Glasspane has no wrapper for can be created by type name. Properties are converted from JSON (enum names, colors, thickness, numbers), and events send back the control's current value.
+On Windows, you can create a control Glasspane has no wrapper for by its type name. Properties are converted from JSON (enum names, colors, thickness, numbers), and events send back the control's current value.
 
 ```js
 Native('Expander', { Header: 'Advanced', IsExpanded: false }, Text('Hidden until opened'))
 Native('CalendarDatePicker', { PlaceholderText: 'Pick a date' }).on('DateChanged', v => console.log(v))
 Native('RatingControl', { Value: 3 }).on('ValueChanged', v => save(v))
+```
+
+## Platform differences in your code
+
+`system.platform` is `'windows'` or `'macos'`. `system.pick` returns the value for the current platform:
+
+```js
+const mod = system.pick({ windows: 'Ctrl', macos: '\u2318' });
+const label = system.pick({ macos: 'Reveal in Finder', default: 'Show in Explorer' });
+```
+
+When the differences are bigger, keep one file per platform and let `system.load` choose. `system.load('./shell')` loads `shell.windows.js` or `shell.macos.js` and falls back to `shell.js` if there is no file for the current platform. The path is relative to your main script's folder, and `pack` includes all of the files.
+
+```js
+const shell = system.load('./platform/shell');
+Button(shell.revealLabel, () => shell.reveal(file));
 ```
 
 ## Examples
@@ -202,6 +220,7 @@ glasspane examples/counter.js   # state, buttons, text field, toggle, slider
 glasspane examples/todo.js      # keyed lists, Enter to submit, dialogs, save picker
 glasspane examples/gallery.js   # every control, Native views, ZStack
 glasspane examples/windows.js   # several windows, shared state, per-window dialogs
+glasspane examples/platform.js  # system.platform and a separate file per OS
 ```
 
 ## Several windows
@@ -232,9 +251,9 @@ Closing the main window leaves the others running. `system.quit()` closes every 
 
 ## Limits
 
-- Node.js runs as a child process rather than inside the host, so Task Manager (Activity Monitor on macOS) shows two entries
-  while an app runs. That is the trade for not being pinned to one Node version.
+- Node.js runs as a child process rather than inside the host, so Task Manager (Activity Monitor on macOS)
+  shows two entries while an app runs. In return, you are not pinned to one Node version.
 - stdout belongs to the protocol, so `console.log` is routed to stderr. A library that writes to
-  `process.stdout` directly is ignored with a warning instead of corrupting the message stream.
+  `process.stdout` directly is ignored with a warning, so it cannot corrupt the message stream.
 
 TypeScript definitions ship in `index.d.ts`.
