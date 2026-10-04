@@ -2,12 +2,16 @@
 * text=auto
 
 # The repo's language bar counts bytes of JavaScript, C# and Swift. These paths are left out so the
-# three come to about a third each (about 41.5 KB of source apiece). Re-check the sizes when a
+# three come to about a third each (about 41.2 KB of source apiece). Re-check the sizes when a
 # host grows, since the Swift side is the reference.
 test/** linguist-vendored
 examples/** linguist-documentation
 index.d.ts linguist-vendored
-lib/launch.js linguist-vendored
+lib/index.js linguist-vendored
+lib/state.js linguist-vendored
 lib/system.js linguist-vendored
-native/Host/HostApp.cs linguist-vendored
+native/Host/Program.cs linguist-vendored
+native/Host/Reconciler.Children.cs linguist-vendored
 native/Host/Reconciler.Native.cs linguist-vendored
+native/MacHost/Package.swift linguist-vendored
+native/MacHost/Sources/Glasspane/Entry.swift linguist-vendored
