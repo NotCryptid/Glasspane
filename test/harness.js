@@ -81,7 +81,8 @@ function buttonId(node, label) {
 }
 
 /** Waits for pending microtasks and timers to settle. */
-const tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
+// A floor of 50 ms keeps the tests steady on a loaded machine, such as a CI runner or a cold start.
+const tick = (ms = 5) => new Promise((r) => setTimeout(r, Math.max(ms, 50)));
 
 /**
  * Ends a test case. The bridge keeps stdin resumed so a real app stays alive with no windows, so
