@@ -109,6 +109,7 @@ struct Common: ViewModifier {
                 v.frame(minWidth: n.cg("minWidth"), maxWidth: maxW,
                         minHeight: n.cg("minHeight"), maxHeight: maxH, alignment: alignment)
             }
+            .ifLet(n.cg("glass")) { $0.glassEffect(.regular, in: RoundedRectangle(cornerRadius: $1)) }
             .ifLet(Theme.color(n.str("background"))) { $0.background($1) }
             .ifLet(n.cg("cornerRadius")) { $0.clipShape(RoundedRectangle(cornerRadius: $1)) }
             .ifLet(border) { v, b in
@@ -166,6 +167,7 @@ struct RootView: View {
         }
         .environmentObject(model)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .ifLet(model.fullSize ? true : nil) { v, _ in v.ignoresSafeArea() }
     }
 }
 
@@ -312,6 +314,7 @@ struct NodeView: View {
         case "Picker": picker
         case "ProgressView": progress
         case "Image": image
+        case "Icon": Image(systemName: symbol(node.str("name") ?? ""))
         case "Divider": Divider()
         case "Native": native
         default: EmptyView()
@@ -403,7 +406,11 @@ struct NodeView: View {
             } else if secure {
                 SecureField(placeholder, text: b).textFieldStyle(.roundedBorder).onSubmit(submit)
             } else {
-                TextField(placeholder, text: b).textFieldStyle(.roundedBorder).onSubmit(submit)
+                if node.str("style") == "plain" {
+                    TextField(placeholder, text: b).textFieldStyle(.plain).onSubmit(submit)
+                } else {
+                    TextField(placeholder, text: b).textFieldStyle(.roundedBorder).onSubmit(submit)
+                }
             }
         }
     }
@@ -469,7 +476,8 @@ struct NodeView: View {
     @ViewBuilder private func fitted(_ img: Image) -> some View {
         switch node.str("fit") {
         case "fill": img.resizable()
-        case "cover": img.resizable().scaledToFill().clipped()
+        // Size from the container, not the image: a wide picture must not widen its parent.
+        case "cover": Color.clear.overlay(img.resizable().scaledToFill()).clipped()
         case "none": img
         default: img.resizable().scaledToFit()
         }

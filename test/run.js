@@ -35,6 +35,9 @@ const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g
 (async () => {
   console.log('glasspane runtime tests\n');
   await test('two windows render independently');
+  await test('png icons convert for each platform');
+  await test('menus resolve for the hosts');
+  await test('a menu click reaches its handler and the menu follows state');
   await test('handler ids are namespaced per window');
   await test('events route to the window that raised them');
   await test('shared state updates every dependent window');

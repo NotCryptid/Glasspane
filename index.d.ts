@@ -62,6 +62,8 @@ export class View {
   border(color?: Color, width?: number): View;
   cornerRadius(r: number): View;
   opacity(o: number): View;
+  /** A translucent glass surface (Liquid Glass on macOS) with this corner radius. Ignored on Windows. */
+  glass(radius?: number): View;
   disabled(on?: boolean): View;
   hidden(on?: boolean): View;
   tooltip(text: string): View;
@@ -80,7 +82,8 @@ export class View {
   label(s: string): View;
   /** A Symbol name such as 'Add', 'Delete', 'Save', 'Setting'. */
   icon(name: string): View;
-  style(s: 'accent' | 'ring' | (string & {})): View;
+  /** 'accent' for buttons, 'ring' for progress, 'plain' for a borderless TextField (macOS). */
+  style(s: 'accent' | 'ring' | 'plain' | (string & {})): View;
   axis(a: 'vertical' | 'horizontal' | 'both'): View;
   fit(f: 'fit' | 'fill' | 'cover' | 'none'): View;
   readOnly(on?: boolean): View;
@@ -112,6 +115,8 @@ export function Picker<T>(label: string, value: Bindable<T> | T, options: Array<
 /** value in 0...1, omit for an indeterminate bar. */
 export function ProgressView(value?: number | Bindable<number>): View;
 export function Spinner(): View;
+/** A symbol: a Windows Symbol name (e.g. 'Home') or, on macOS, any SF Symbol name. Size and color follow font() and foreground(). */
+export function Icon(name: string): View;
 export function Image(source: string, opts?: { fit?: 'fit' | 'fill' | 'cover' | 'none' }): View;
 export function List<T>(items: T[], render: (item: T, index: number) => Child, opts?: { key?: (item: T, i: number) => string | number }): View;
 export function List(...children: Child[]): View;
@@ -125,8 +130,34 @@ export interface WindowOptions {
   height?: number;
   backdrop?: 'mica' | 'micaAlt' | 'acrylic' | 'none';
   theme?: 'system' | 'light' | 'dark';
-  /** Path to an .ico file for the title bar and taskbar (Windows), or an image for the Dock icon (macOS), relative to your script. */
+  /** 'hidden' runs the content up to the window's top edge. The macOS traffic lights or the Windows caption buttons float over it: keep `system.titleBarInsets` clear of your own controls. */
+  titleBar?: 'standard' | 'hidden';
+  /** Corner radius of a window with a hidden title bar, in points. Default 26. A sidebar inset by d points looks right with radius minus d. macOS only. */
+  cornerRadius?: number;
+  /** Path to a square PNG (512px or larger is best) or an .ico/.icns file, relative to your script. It is the title bar and taskbar icon on Windows and the Dock icon on macOS. */
   icon?: string;
+  /** The window's menu bar: the macOS menu bar, or a bar at the top of the window on Windows. Pass a function to read `state` (checkmarks, disabled items); it runs again on every render. */
+  menu?: MenuSpec | (() => MenuSpec);
+}
+
+/** `'edit'`, `'view'`, `'window'` and `'help'` stand for the usual menus of that name. */
+export type MenuSpec = Array<'edit' | 'view' | 'window' | 'help' | MenuDef | false | null | undefined>;
+export interface MenuDef { label: string; items: MenuEntry[] }
+/** `'-'` is a separator. Falsy entries are skipped, so `cond && item` works. */
+export type MenuEntry = MenuItem | '-' | false | null | undefined;
+export interface MenuItem {
+  /** Defaults to the standard label of `role`. */
+  label?: string;
+  onClick?: () => void | Promise<void>;
+  /** A standard item that the host runs itself. Edit items act on the focused text field. */
+  role?: 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'selectAll' | 'minimize' | 'zoom' | 'fullscreen' | 'close' | 'quit';
+  /** `'CmdOrCtrl+N'`, `'Shift+Alt+F5'`. CmdOrCtrl is Command on macOS and Ctrl on Windows. */
+  shortcut?: string;
+  enabled?: boolean;
+  /** Shows a checkmark. */
+  checked?: boolean;
+  /** A submenu. */
+  items?: MenuEntry[];
 }
 
 /** The `system` API. On the global `system`, calls act on the focused window. */
@@ -141,6 +172,8 @@ export interface SystemApi {
   launch(uri: string): Promise<boolean>;
   /** Closes every window. The process exits once the last one is gone. */
   quit(): void;
+  /** Space the system keeps at the sides of a hidden title bar, in points: the traffic lights on the left on macOS, the caption buttons on the right on Windows. */
+  titleBarInsets: { left: number; right: number };
   /** Live window settings: `system.window.title = 'Saved'`. Affects the focused window. */
   window: WindowOptions;
 }

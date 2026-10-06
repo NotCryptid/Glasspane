@@ -11,6 +11,11 @@ final class HostWindow: NSObject, NSWindowDelegate {
     var shown = false
     var lastSize = ""
     var lastIcon: String?
+    var titleHidden = false
+    var cornerRadius: CGFloat = 0
+    var menu: [JSONDict]?
+    var menuJSON = ""
+    var menuActions: [MenuAction] = []
 
     init(id: Int, app: HostApp) {
         self.id = id
@@ -35,6 +40,7 @@ final class HostWindow: NSObject, NSWindowDelegate {
     // The host owns focus, so `system.*` without a window follows the window the user is in.
     func windowDidBecomeKey(_ notification: Notification) {
         app?.bridge.send(["type": "focus", "window": id])
+        app?.installMenu(for: self)
     }
 }
 
@@ -118,6 +124,49 @@ final class HostApp: NSObject, NSApplicationDelegate {
             if !hw.shown { w.center() }
         }
 
+        // A hidden title bar lets the content run to the window's top edge, under the traffic lights.
+        let hidden = (c["titleBar"] as? String) == "hidden"
+        if hidden != hw.titleHidden {
+            hw.titleHidden = hidden
+            if hidden { w.styleMask.insert(.fullSizeContentView) } else { w.styleMask.remove(.fullSizeContentView) }
+            w.titlebarAppearsTransparent = hidden
+            w.titleVisibility = hidden ? .hidden : .visible
+            w.isMovableByWindowBackground = hidden
+            // An empty unified toolbar gives the window the large corner radius and the inset traffic
+            // lights of a modern macOS window, which a floating sidebar can then wrap around.
+            if hidden {
+                w.toolbar = NSToolbar(identifier: "glasspane.titlebar")
+                w.toolbarStyle = .unified
+            } else {
+                w.toolbar = nil
+            }
+            hw.model.fullSize = hidden
+        }
+
+        // The system's window corners are tighter than a floating sidebar's. With a hidden title bar the
+        // window can round its own corners instead, so a sidebar inset by `d` points can use radius - d.
+        let radius = hidden ? CGFloat(doubleValue(c["cornerRadius"]) ?? 26) : 0
+        if radius != hw.cornerRadius, let frame = w.contentView?.superview {
+            hw.cornerRadius = radius
+            frame.wantsLayer = true
+            frame.layer?.cornerRadius = radius
+            frame.layer?.cornerCurve = .continuous
+            frame.layer?.masksToBounds = radius > 0
+            w.isOpaque = radius == 0
+            w.backgroundColor = radius > 0 ? .clear : .windowBackgroundColor
+            w.invalidateShadow()
+        }
+
+        // The app's menu bar. It is rebuilt only when it changes, and installed while this window is key.
+        let menu = c["menu"] as? [JSONDict]
+        let menuJSON = menu.flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys]) }
+            .flatMap { String(data: $0, encoding: .utf8) } ?? ""
+        if menuJSON != hw.menuJSON {
+            hw.menuJSON = menuJSON
+            hw.menu = menu
+            if w.isKeyWindow || NSApp.keyWindow == nil || !hw.shown { installMenu(for: hw) }
+        }
+
         switch c["theme"] as? String {
         case "dark": w.appearance = NSAppearance(named: .darkAqua)
         case "light": w.appearance = NSAppearance(named: .aqua)
@@ -151,43 +200,18 @@ final class HostApp: NSObject, NSApplicationDelegate {
 
     // MARK: menu
 
-    /// Without an Edit menu, Cmd+C and Cmd+V do nothing in text fields.
+    /// Without an Edit menu, Cmd+C and Cmd+V do nothing in text fields, so the default has one.
     private func buildMenu() {
-        let name = (Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String) ?? ProcessInfo.processInfo.processName
-        let main = NSMenu()
-
-        let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About \(name)", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
-        appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Hide \(name)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
-        appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit \(name)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        add(appMenu, to: main)
-
-        let edit = NSMenu(title: "Edit")
-        edit.addItem(withTitle: "Undo", action: Selector(("undo:")), keyEquivalent: "z")
-        let redo = edit.addItem(withTitle: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
-        redo.keyEquivalentModifierMask = [.command, .shift]
-        edit.addItem(.separator())
-        edit.addItem(withTitle: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
-        edit.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        edit.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        edit.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        add(edit, to: main)
-
-        let windowMenu = NSMenu(title: "Window")
-        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windowMenu.addItem(withTitle: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        add(windowMenu, to: main)
-        NSApp.windowsMenu = windowMenu
-
-        NSApp.mainMenu = main
+        var keep: [MenuAction] = []
+        NSApp.mainMenu = AppMenu.build(menus: nil, emit: { _ in }, keep: &keep)
     }
 
-    private func add(_ submenu: NSMenu, to menu: NSMenu) {
-        let item = NSMenuItem()
-        item.submenu = submenu
-        menu.addItem(item)
+    /// The menu bar belongs to the window the user is in, so each window can bring its own.
+    func installMenu(for hw: HostWindow) {
+        var keep: [MenuAction] = []
+        let model = hw.model
+        NSApp.mainMenu = AppMenu.build(menus: hw.menu, emit: { id in model.emit(id) }, keep: &keep)
+        hw.menuActions = keep
     }
 }
 

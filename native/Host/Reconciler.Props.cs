@@ -165,6 +165,14 @@ public sealed partial class Reconciler
             case "Image":
                 ApplyImage((Image)el, p);
                 break;
+            case "Icon":
+            {
+                var icon = J.Str(p, "name");
+                SymbolIcon? si = icon != null && Enum.TryParse<Symbol>(icon, true, out var sym) ? new SymbolIcon(sym) : null;
+                if (si != null && Theme.Brush(J.Str(p, "foreground")) is { } fg) si.Foreground = fg;
+                ((Border)el).Child = si;
+                break;
+            }
             case "Divider":
             {
                 var b = (Border)el;
@@ -212,12 +220,20 @@ public sealed partial class Reconciler
         ToolTipService.SetToolTip(fe, J.Str(p, "tooltip"));
 
         Set(fe, PaddingDp(fe), Thick(p["padding"]));
-        Set(fe, BackgroundDp(fe), Theme.Brush(J.Str(p, "background")));
-        Set(fe, CornerDp(fe), J.Num(p, "cornerRadius") is { } cr ? new CornerRadius(cr) : null);
+        // `glass` is acrylic with a hairline edge here; macOS draws Liquid Glass.
+        var glass = J.Num(p, "glass");
+        Set(fe, BackgroundDp(fe), Theme.Brush(J.Str(p, "background")) ?? (glass != null ? Theme.Glass() : null));
+        Set(fe, CornerDp(fe), J.Num(p, "cornerRadius") is { } cr ? new CornerRadius(cr)
+            : glass is { } gr ? new CornerRadius(gr) : null);
         if (p["border"] is JsonObject b)
         {
             Set(fe, BorderBrushDp(fe), Theme.Brush(J.Str(b, "color") ?? "divider"));
             Set(fe, BorderThicknessDp(fe), new Thickness(J.Num(b, "width") ?? 1));
+        }
+        else if (glass != null)
+        {
+            Set(fe, BorderBrushDp(fe), Theme.Brush("cardBorder"));
+            Set(fe, BorderThicknessDp(fe), new Thickness(1));
         }
         else
         {

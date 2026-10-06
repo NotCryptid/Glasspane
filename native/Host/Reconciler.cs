@@ -103,6 +103,7 @@ public sealed partial class Reconciler
                 el = J.Str(node["p"], "style") == "ring" ? new ProgressRing() : new ProgressBar { Maximum = 1 };
                 break;
             case "Image": el = new Image(); break;
+            case "Icon": el = new Border(); break;
             case "Native": el = CreateNative(J.Str(node["p"], "type")); break;
             default: throw new InvalidOperationException("Unknown view type: " + t);
         }

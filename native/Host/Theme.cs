@@ -70,6 +70,14 @@ static class Theme
         return b;
     }
 
+    static Brush? _glass;
+
+    /// <summary>The Windows stand-in for glass: Fluent in-app acrylic, tinted by the theme.</summary>
+    public static Brush Glass() => _glass ??= (Brush)XamlReader.Load(
+        "<AcrylicBrush xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
+        "TintColor=\"{ThemeResource SolidBackgroundFillColorBase}\" TintOpacity=\"0.45\" TintLuminosityOpacity=\"0.85\" " +
+        "FallbackColor=\"{ThemeResource SolidBackgroundFillColorSecondary}\"/>");
+
     public static Color? ParseColor(string spec)
     {
         if (Named.TryGetValue(spec, out var n)) return n;

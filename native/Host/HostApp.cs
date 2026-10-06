@@ -16,6 +16,13 @@ sealed class HostWindow
 {
     public Window Window = null!;
     public Grid Root = null!;
+    /// <summary>The app's UI. Root also holds the menu bar above it.</summary>
+    public Grid Body = null!;
+    public ContentControl MenuSlot = null!;
+    public Action<string, JsonNode?> Emit = null!;
+    public Control? LastInput;
+    public bool TitleHidden;
+    public string LastMenu = "";
     public Reconciler Reconciler = null!;
     public bool Shown;
     public long Sent, Acked;
@@ -75,18 +82,31 @@ public sealed class HostApp : Application, IXamlMetadataProvider
     {
         var hw = new HostWindow();
         hw.Window = new Window();
+        // Row 0 holds the menu bar when the app has one; row 1 holds the app's UI.
         hw.Root = (Grid)XamlReader.Load(
-            "<Grid xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
-            "Background=\"Transparent\"/>");
+            "<Grid xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Background=\"Transparent\">" +
+            "<Grid.RowDefinitions><RowDefinition Height=\"Auto\"/><RowDefinition Height=\"*\"/></Grid.RowDefinitions></Grid>");
+        hw.MenuSlot = new ContentControl { IsTabStop = false, HorizontalAlignment = HorizontalAlignment.Left };
+        hw.Body = new Grid();
+        Grid.SetRow(hw.MenuSlot, 0);
+        Grid.SetRow(hw.Body, 1);
+        hw.Root.Children.Add(hw.MenuSlot);
+        hw.Root.Children.Add(hw.Body);
         hw.Window.Content = hw.Root;
+        // Menu items such as Copy act on the text box the user was in; clicking the menu moves focus away from it.
+        hw.Root.GotFocus += (_, e) =>
+        {
+            if (e.OriginalSource is TextBox or PasswordBox) hw.LastInput = (Control)e.OriginalSource;
+        };
         // Events are namespaced by window id in JS, but routing explicitly keeps the mapping explicit.
-        hw.Reconciler = new Reconciler((handlerId, value) =>
+        hw.Emit = (handlerId, value) =>
         {
             hw.Sent++;
             var msg = new JsonObject { ["type"] = "event", ["window"] = id, ["id"] = handlerId, ["seq"] = hw.Sent };
             if (value != null) msg["value"] = value.DeepClone();
             Bridge.Send(msg);
-        });
+        };
+        hw.Reconciler = new Reconciler(hw.Emit);
         hw.Window.Closed += (_, _) =>
         {
             _windows.Remove(id);
@@ -118,11 +138,11 @@ public sealed class HostApp : Application, IXamlMetadataProvider
             if (msg["config"] is JsonObject w) ApplyWindow(hw, w);
             if (msg["root"] is JsonObject tree)
             {
-                var next = hw.Reconciler.Reconcile(hw.Root.Children.FirstOrDefault(), tree);
-                if (!ReferenceEquals(hw.Root.Children.FirstOrDefault(), next))
+                var next = hw.Reconciler.Reconcile(hw.Body.Children.FirstOrDefault(), tree);
+                if (!ReferenceEquals(hw.Body.Children.FirstOrDefault(), next))
                 {
-                    hw.Root.Children.Clear();
-                    hw.Root.Children.Add(next);
+                    hw.Body.Children.Clear();
+                    hw.Body.Children.Add(next);
                 }
             }
         }
@@ -164,6 +184,30 @@ public sealed class HostApp : Application, IXamlMetadataProvider
             catch (Exception e) { Bridge.Log("icon failed: " + e.Message); }
         }
 
+        // A hidden title bar lets the content run to the top edge; the system caption buttons stay on top of it.
+        var hidden = J.Str(w, "titleBar") == "hidden";
+        if (hidden != hw.TitleHidden)
+        {
+            hw.TitleHidden = hidden;
+            win.ExtendsContentIntoTitleBar = hidden;
+            if (hidden && AppWindowTitleBar.IsCustomizationSupported())
+            {
+                var tb = win.AppWindow.TitleBar;
+                tb.ButtonBackgroundColor = Colors.Transparent;
+                tb.ButtonInactiveBackgroundColor = Colors.Transparent;
+            }
+        }
+
+        // The app's menu bar, rebuilt only when its description changes.
+        var menu = w["menu"] as JsonArray;
+        var menuJson = menu?.ToJsonString() ?? "";
+        if (menuJson != hw.LastMenu)
+        {
+            hw.LastMenu = menuJson;
+            hw.MenuSlot.Content = menu == null ? null
+                : AppMenu.Build(menu, id => hw.Emit(id, null), role => RunRole(hw, role));
+        }
+
         hw.Root.RequestedTheme = J.Str(w, "theme") switch
         {
             "dark" => ElementTheme.Dark, "light" => ElementTheme.Light, _ => ElementTheme.Default,
@@ -183,6 +227,35 @@ public sealed class HostApp : Application, IXamlMetadataProvider
             hw.Root.Background = backdrop == "none"
                 ? (Brush)XamlReader.Load("<SolidColorBrush xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" Color=\"{ThemeResource SolidBackgroundFillColorBase}\"/>")
                 : null;
+        }
+    }
+
+    /// <summary>The standard menu items. Edit commands go to the text box the user was last in.</summary>
+    static void RunRole(HostWindow hw, string role)
+    {
+        var win = hw.Window;
+        var box = hw.LastInput as TextBox;
+        switch (role)
+        {
+            case "undo": box?.Undo(); break;
+            case "redo": box?.Redo(); break;
+            case "cut": box?.CutSelectionToClipboard(); break;
+            case "copy": box?.CopySelectionToClipboard(); break;
+            case "paste": box?.PasteFromClipboard(); break;
+            case "selectAll": box?.SelectAll(); break;
+            case "minimize": (win.AppWindow.Presenter as OverlappedPresenter)?.Minimize(); break;
+            case "zoom":
+                if (win.AppWindow.Presenter is OverlappedPresenter op)
+                {
+                    if (op.State == OverlappedPresenterState.Maximized) op.Restore(); else op.Maximize();
+                }
+                break;
+            case "fullscreen":
+                win.AppWindow.SetPresenter(win.AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen
+                    ? AppWindowPresenterKind.Overlapped : AppWindowPresenterKind.FullScreen);
+                break;
+            case "close": win.Close(); break;
+            case "quit": Environment.Exit(0); break;
         }
     }
 

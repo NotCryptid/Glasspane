@@ -7,6 +7,8 @@ final class WindowModel: ObservableObject {
 
     @Published var root: VNode?
     @Published var backdrop = "mica"
+    /// The content runs under a hidden title bar, so it must ignore the title bar's safe area.
+    @Published var fullSize = false
     /// Values the user typed that Node has not acknowledged yet. Without these, a render that was
     /// already in flight would put the old text back under the caret.
     @Published var overrides: [String: Any] = [:]

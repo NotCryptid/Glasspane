@@ -59,7 +59,49 @@ Differences from Windows:
 - `flex(n)` takes a share of the leftover space, but it ignores the weight `n`. Competing flex views split the space equally.
 - `'mono'` uses the system monospaced font. Other Windows font names, such as `'Segoe UI'`, fall back to the system font. A button's `icon` takes a Windows symbol name (`'Add'`, `'Delete'`, `'Save'`) or any SF Symbol name.
 - A Mac window has no icon of its own, so `window.icon` sets the Dock icon.
+- `.glass(radius)` draws a translucent Liquid Glass surface behind a view. Windows draws Fluent acrylic with a hairline edge instead. Use a large radius (`100`) for a pill, such as a search field with an `Icon` and a `TextField(...).style('plain')`.
+- `titleBar: 'hidden'` in the window options runs the content to the top edge of the window. On macOS the traffic lights float over it, so a sidebar can carry them (leave about 50 px of padding above its first row). On Windows the caption buttons float over the top right. `system.titleBarInsets` says how much room each side needs. macOS also uses `cornerRadius` (default 26) for the window's corners, because the system's own are tighter than a floating sidebar's. A sidebar inset by 8 points looks right with `glass(18)`.
 - `system.launch()` opens URLs in the default app. Windows protocols such as `ms-settings:` do nothing.
+
+## Menus
+
+Give the window a `menu` and each platform builds its own menu bar: the macOS menu bar, or a bar at the top of the window on Windows.
+
+```js
+App({
+  title: 'Notes',
+  menu: () => [
+    { label: 'File', items: [
+      { label: 'New Note', shortcut: 'CmdOrCtrl+N', onClick: newNote },
+      { label: 'Open Recent', items: recent.value.map((f) => ({ label: f, onClick: () => open(f) })) },
+      '-',
+      { label: 'Autosave', checked: autosave.value, onClick: () => { autosave.value = !autosave.value; } },
+    ] },
+    'edit', 'view', 'window',
+  ],
+}, body);
+```
+
+- `'edit'`, `'view'`, `'window'` and `'help'` are the usual menus, ready made. Edit works on the focused text field.
+- An item has a `label`, an `onClick`, an optional `shortcut`, `enabled`, `checked` and `items` for a submenu. `'-'` is a separator, and falsy entries are skipped, so `cond && item` works.
+- `role` picks a standard item (`'undo'`, `'redo'`, `'cut'`, `'copy'`, `'paste'`, `'selectAll'`, `'minimize'`, `'zoom'`, `'fullscreen'`, `'close'`, `'quit'`) and the host runs it. The label and shortcut default to the platform's.
+- `CmdOrCtrl` in a shortcut is Command on macOS and Ctrl on Windows.
+- Pass a function, as above, and it runs again on every render, so a checkmark or a disabled item follows your `state`.
+- On macOS the app menu (About, Hide, Quit) always comes first, and the menu bar follows whichever window is in front. Without a `menu`, the Mac gets Edit and Window menus so copy and paste work. On Windows there is no menu unless you give one, so add `{ role: 'quit' }` to File.
+
+## Icons
+
+One PNG is enough on both platforms. Glasspane turns it into an `.ico` on Windows and into an `.icns` with every size on macOS, so you never convert it yourself. Use a square image of 512 px or more. `.ico` and `.icns` files are accepted as they are.
+
+```js
+App({ title: 'Notes', icon: 'icon.png' }, body)   // title bar and taskbar (Windows), Dock (macOS) while developing
+```
+
+```
+npx glasspane pack app.js -n MyApp -i icon.png    // the packaged exe or .app
+```
+
+`pack` also reads `"glasspane": { "icon": "icon.png" }` from `package.json`. Relative paths resolve from your script's folder, and `system.window.icon = 'other.png'` changes it at runtime. On Windows a PNG is stored in the `.ico` as a single image, which Windows scales for small sizes. For crisp 16 and 32 px icons there, pass your own multi-size `.ico`. The Mac `.icns` comes from `sips` and `iconutil`, so a PNG is only converted on a Mac.
 
 ## Packaging on Windows
 
@@ -69,27 +111,19 @@ npx glasspane pack app.js -n MyApp
 
 This writes `dist/MyApp/`, which holds `MyApp.exe`, the WinUI host, a copy of `node.exe`, and an `app/` copy of your project including `node_modules`. Zip the folder and ship it. Users need neither Node nor .NET, and `MyApp.exe` runs on a double-click.
 
-Options: `-o <dir>` sets the output folder, `-n <name>` sets the exe name (default: `productName` or `name` from package.json), and `-i <file.ico>` sets the icon.
+Options: `-o <dir>` sets the output folder, `-n <name>` sets the exe name (default: `productName` or `name` from package.json), and `-i <icon.png>` sets the icon.
 
 The result is a folder because WinUI and the Node runtime have to sit next to the exe. The bundled `node.exe` is about 90 MB, which is most of the folder. Run `npm install --omit=dev` in your project first so dev dependencies stay out of the package.
 
 ### Icons
 
-Icons are `.ico` files. Include 16, 32, 48 and 256 px sizes. Set one when packaging:
+Use one square PNG, 512 px or larger, for every platform (see Icons below). Existing `.ico` files work too. To change the icon of an exe you already packaged:
 
 ```
-npx glasspane pack app.js -n MyApp -i icon.ico
+npx glasspane icon dist/MyApp/MyApp.exe icon.png
 ```
 
-or set it once in `package.json`, which `pack` reads: `"glasspane": { "icon": "icon.ico" }`. To change the icon of an exe you already packaged:
-
-```
-npx glasspane icon dist/MyApp/MyApp.exe new.ico
-```
-
-That changes the file icon shown in Explorer, pinned taskbar entries and shortcuts. To set the title bar and taskbar icon while developing with `glasspane app.js`, or to change it at runtime, use the window option: `App({ title: 'Notes', icon: 'icon.ico' }, body)` or `system.window.icon = 'other.ico'`. Relative paths resolve from your script's folder.
-
-Editing exe icons uses `rcedit`, which only works on Windows.
+That changes the file icon shown in Explorer, pinned taskbar entries and shortcuts. Editing exe icons uses `rcedit`, which only works on Windows.
 
 ## How it works
 
