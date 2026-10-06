@@ -26,6 +26,9 @@
     "native/MacHost/Sources"
   ],
   "scripts": {
+    "build": "node scripts/build-host.js",
+    "build:windows": "node scripts/build-host.js --windows",
+    "build:macos": "node scripts/build-host.js --macos",
     "build:host": "node scripts/build-host.js",
     "start": "glasspane examples/counter.js",
     "test": "node test/run.js"

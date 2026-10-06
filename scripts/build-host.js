@@ -43,5 +43,19 @@ function buildWindows() {
   process.exit(r.status ?? 1);
 }
 
-if (process.platform === 'darwin') buildMac();
+// --windows / --macos pick the target; with neither, build for the OS we are running on.
+// Each host needs its own toolchain (WinUI only builds on Windows, SwiftUI only on macOS).
+const flags = process.argv.slice(2);
+const unknown = flags.filter((f) => f !== '--windows' && f !== '--macos');
+if (unknown.length || (flags.includes('--windows') && flags.includes('--macos'))) {
+  console.error('usage: npm run build [-- --windows | --macos]');
+  process.exit(2);
+}
+const target = flags.includes('--windows') ? 'win32' : flags.includes('--macos') ? 'darwin' : process.platform;
+if (target !== process.platform) {
+  const [name, needs] = target === 'win32' ? ['Windows', 'Windows with the .NET SDK'] : ['macOS', 'a Mac with Xcode'];
+  console.error(`The ${name} host can only be built on ${needs}. Run this on that machine.`);
+  process.exit(1);
+}
+if (target === 'darwin') buildMac();
 else buildWindows();
