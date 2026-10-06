@@ -25,3 +25,6 @@ graphify-out/
 .env
 .env.local
 .env.*.local
+
+# MacOS bullshit
+.DS_Store
