@@ -421,10 +421,12 @@ struct NodeView: View {
         let lo = node.num("min") ?? 0
         let hi = max(node.num("max") ?? 100, lo + 0.000001)
         let step = node.num("step") ?? 1
-        let value = binding("value", lo, number)
-        labeled {
-            if step > 0 { Slider(value: value, in: lo...hi, step: step) } else { Slider(value: value, in: lo...hi) }
-        }
+        let raw = binding("value", lo, number)
+        // A stepped Slider draws a tick per step on current macOS; snap the value instead.
+        let value = Binding<Double>(get: { raw.wrappedValue }, set: { v in
+            raw.wrappedValue = step > 0 ? min(hi, lo + ((v - lo) / step).rounded() * step) : v
+        })
+        labeled { Slider(value: value, in: lo...hi) }
     }
 
     @ViewBuilder private var stepper: some View {

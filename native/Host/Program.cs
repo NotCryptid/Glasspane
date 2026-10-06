@@ -11,9 +11,18 @@ public static class Launch
 
 public static class Program
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int MessageBoxW(IntPtr hWnd, string text, string caption, uint type);
+
     [STAThread]
     public static void Main(string[] args)
     {
+        // Windows 11 24H2 is build 26100. The manifest cannot express a build number, so check here.
+        if (Environment.OSVersion.Version.Build < 26100)
+        {
+            MessageBoxW(IntPtr.Zero, "This app needs Windows 11 24H2 (build 26100) or newer.", "Unsupported Windows version", 0x10);
+            Environment.Exit(1);
+        }
         if (args.Length == 0)
         {
             // Packaged app: `glasspane pack` writes glasspane.json next to the exe.

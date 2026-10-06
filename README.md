@@ -29,7 +29,7 @@ On Windows the window uses the Mica backdrop, your system accent color, light an
 
 ## Windows
 
-You need Windows 10 1809 or newer (x64 or ARM64), [Node.js](https://nodejs.org) 20 or newer, and the [.NET SDK](https://dotnet.microsoft.com/download) 10 or newer. The first time you run an app, the SDK builds the host executable. After that you can run apps without .NET, because the host bundles its own runtime.
+You need Windows 11 24H2 (build 26100) or newer (x64 or ARM64), [Node.js](https://nodejs.org) 20 or newer, and the [.NET SDK](https://dotnet.microsoft.com/download) 10 or newer. The first time you run an app, the SDK builds the host executable. After that you can run apps without .NET, because the host bundles its own runtime.
 
 ```
 npm install @cryptidbleh/glasspane
@@ -42,7 +42,7 @@ Glasspane uses whichever Node.js you have installed, so it is not pinned to one 
 
 ## macOS
 
-You need macOS 13 or newer, [Node.js](https://nodejs.org) 20 or newer, and Xcode or the Command Line Tools (`xcode-select --install`, Swift 5.9 or newer). The first time you run an app, Swift builds the host.
+You need macOS 27 or newer, [Node.js](https://nodejs.org) 20 or newer, and Xcode or the Command Line Tools (`xcode-select --install`, Swift 5.9 or newer). The first time you run an app, Swift builds the host.
 
 ```
 npm install @cryptidbleh/glasspane

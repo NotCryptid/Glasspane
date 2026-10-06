@@ -4,7 +4,7 @@ import PackageDescription
 // The macOS host: a SwiftUI renderer for the same JSON protocol the WinUI host speaks.
 let package = Package(
     name: "Glasspane",
-    platforms: [.macOS(.v13)],
+    platforms: [.macOS("27.0")],
     targets: [
         .executableTarget(name: "Glasspane", path: "Sources/Glasspane"),
     ],
