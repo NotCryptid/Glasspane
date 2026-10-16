@@ -1,6 +1,6 @@
 {
   "name": "@cryptidbleh/glasspane",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "publishConfig": {
     "access": "public"
   },
@@ -19,6 +19,7 @@
     "lib",
     "scripts",
     "index.d.ts",
+    "ICONS.md",
     "native/Host/*.cs",
     "native/Host/*.csproj",
     "native/Host/app.manifest",
@@ -38,6 +39,6 @@
     "glasspane": "bin/glasspane.js"
   },
   "dependencies": {
-    "rcedit": "^4.0.1"
+    "resedit": "^3.1.0"
   }
 }

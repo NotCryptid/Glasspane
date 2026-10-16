@@ -19,6 +19,8 @@ sealed class Meta
     public string LayoutSig = "";
     public HashSet<string> WiredNative = new();
     public string? PickerSig;
+    public double? CornerRadius;
+    public bool WiredSize;
 }
 
 /// <summary>

@@ -109,6 +109,20 @@ public sealed partial class Reconciler
         return result;
     }
 
+    static bool HasMainAxisFlex(JsonObject node, bool horizontal)
+    {
+        var t = J.Str(node, "t");
+        if ((horizontal && t != "HStack") || (!horizontal && t != "VStack")) return false;
+        if (node["c"] is not JsonArray kids) return false;
+        foreach (var k in kids)
+        {
+            if (k is not JsonObject child) continue;
+            if (J.Str(child, "t") == "Spacer") return true;
+            if ((J.Num(child["p"], "flex") ?? 0) > 0) return true;
+        }
+        return false;
+    }
+
     void LayoutStack(Grid g, string t, JsonObject p, List<JsonObject> nodes, List<UIElement> els, Meta m)
     {
         if (t == "ZStack")
@@ -121,11 +135,13 @@ public sealed partial class Reconciler
                 Grid.SetRow(fe, 0);
                 Grid.SetColumn(fe, 0);
                 if (!J.Has(cp, "hAlign"))
-                    fe.HorizontalAlignment = za.EndsWith("Leading") || za == "leading" ? HorizontalAlignment.Left
+                    fe.HorizontalAlignment = !J.Has(cp, "width") && HasMainAxisFlex(nodes[i], true) ? HorizontalAlignment.Stretch
+                        : za.EndsWith("Leading") || za == "leading" ? HorizontalAlignment.Left
                         : za.EndsWith("Trailing") || za == "trailing" ? HorizontalAlignment.Right
                         : HorizontalAlignment.Center;
                 if (!J.Has(cp, "vAlign"))
-                    fe.VerticalAlignment = za.StartsWith("top") ? VerticalAlignment.Top
+                    fe.VerticalAlignment = !J.Has(cp, "height") && HasMainAxisFlex(nodes[i], false) ? VerticalAlignment.Stretch
+                        : za.StartsWith("top") ? VerticalAlignment.Top
                         : za.StartsWith("bottom") ? VerticalAlignment.Bottom
                         : VerticalAlignment.Center;
             }
@@ -170,13 +186,17 @@ public sealed partial class Reconciler
 
             if (h)
             {
-                if (!J.Has(cp, "vAlign")) fe.VerticalAlignment = ct == "Divider" ? VerticalAlignment.Stretch : VAlign(cross) ?? VerticalAlignment.Center;
+                if (!J.Has(cp, "vAlign"))
+                    fe.VerticalAlignment = ct == "Divider" || (!J.Has(cp, "height") && HasMainAxisFlex(nodes[i], false))
+                        ? VerticalAlignment.Stretch : VAlign(cross) ?? VerticalAlignment.Center;
                 if (flex[i] > 0 && !J.Has(cp, "hAlign")) fe.HorizontalAlignment = HorizontalAlignment.Stretch;
                 if (ct == "Divider") fe.Width = 1;
             }
             else
             {
-                if (!J.Has(cp, "hAlign")) fe.HorizontalAlignment = ct == "Divider" ? HorizontalAlignment.Stretch : HAlign(cross) ?? HorizontalAlignment.Center;
+                if (!J.Has(cp, "hAlign"))
+                    fe.HorizontalAlignment = ct == "Divider" || (!J.Has(cp, "width") && HasMainAxisFlex(nodes[i], true))
+                        ? HorizontalAlignment.Stretch : HAlign(cross) ?? HorizontalAlignment.Center;
                 if (flex[i] > 0 && !J.Has(cp, "vAlign")) fe.VerticalAlignment = VerticalAlignment.Stretch;
                 if (ct == "Divider") fe.Height = 1;
             }

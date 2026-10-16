@@ -80,9 +80,9 @@ export class View {
   alignment(a: Align | 'topLeading' | 'topTrailing' | 'bottomLeading' | 'bottomTrailing'): View;
   placeholder(s: string): View;
   label(s: string): View;
-  /** A Symbol name such as 'Add', 'Delete', 'Save', 'Setting'. */
-  icon(name: string): View;
-  /** 'accent' for buttons, 'ring' for progress, 'plain' for a borderless TextField (macOS). */
+  /** A universal icon name ('search', 'photos'), a { windows, macos } pair, or a direct Windows Symbol / SF Symbol name. */
+  icon(name: IconSpec): View;
+  /** 'accent' for buttons, 'ring' for progress, 'plain' for a borderless TextField. */
   style(s: 'accent' | 'ring' | 'plain' | (string & {})): View;
   axis(a: 'vertical' | 'horizontal' | 'both'): View;
   fit(f: 'fit' | 'fill' | 'cover' | 'none'): View;
@@ -90,6 +90,13 @@ export class View {
   ring(): View;
   selection(binding: Bindable<number>): View;
 }
+
+export type IconSpec =
+  | string
+  | { windows?: string; macos?: string; win?: string; mac?: string; symbol?: string; sf?: string };
+
+export const icons: Readonly<Record<string, { windows: string; macos: string }>>;
+export function resolveSymbol(spec: IconSpec, platform?: 'windows' | 'macos' | 'win32' | 'darwin'): string;
 
 type Props = { spacing?: number; alignment?: Align; [k: string]: unknown };
 type Stack = { (props: Props, ...children: Child[]): View; (...children: Child[]): View };
@@ -115,8 +122,8 @@ export function Picker<T>(label: string, value: Bindable<T> | T, options: Array<
 /** value in 0...1, omit for an indeterminate bar. */
 export function ProgressView(value?: number | Bindable<number>): View;
 export function Spinner(): View;
-/** A symbol: a Windows Symbol name (e.g. 'Home') or, on macOS, any SF Symbol name. Size and color follow font() and foreground(). */
-export function Icon(name: string): View;
+/** A symbol: a universal icon name ('search', 'photos'), a { windows, macos } pair, or a direct Windows Symbol / SF Symbol name. Size and color follow font() and foreground(). */
+export function Icon(name: IconSpec): View;
 export function Image(source: string, opts?: { fit?: 'fit' | 'fill' | 'cover' | 'none' }): View;
 export function List<T>(items: T[], render: (item: T, index: number) => Child, opts?: { key?: (item: T, i: number) => string | number }): View;
 export function List(...children: Child[]): View;
@@ -174,6 +181,16 @@ export interface SystemApi {
   quit(): void;
   /** Space the system keeps at the sides of a hidden title bar, in points: the traffic lights on the left on macOS, the caption buttons on the right on Windows. */
   titleBarInsets: { left: number; right: number };
+  /** Default corner radius multiplier (3x ratio): `1` on macOS and `1/3` on Windows. */
+  readonly cornerRadiusMultiplier: number;
+  /** Softer corner radius multiplier for cards & floating glass surfaces (2x ratio): `1` on macOS and `0.5` on Windows. */
+  readonly softCornerRadiusMultiplier: number;
+  /** Alias for `softCornerRadiusMultiplier`. */
+  readonly smoothCornerRadiusMultiplier: number;
+  /** Alias for `cornerRadiusMultiplier`. */
+  readonly cornerScale: number;
+  /** Alias for `softCornerRadiusMultiplier`. */
+  readonly softCornerScale: number;
   /** Live window settings: `system.window.title = 'Saved'`. Affects the focused window. */
   window: WindowOptions;
 }
@@ -191,6 +208,12 @@ export interface AppWindow extends SystemApi {
 /** Opens a window. Call it more than once for a multi-window app. */
 export function App(title: string, body: () => Child): AppWindow;
 export function App(options: WindowOptions, body: () => Child): AppWindow;
+
+export const cornerRadiusMultiplier: number;
+export const softCornerRadiusMultiplier: number;
+export const smoothCornerRadiusMultiplier: number;
+export const cornerScale: number;
+export const softCornerScale: number;
 
 export const system: SystemApi & {
   /** The OS the app is running on. */

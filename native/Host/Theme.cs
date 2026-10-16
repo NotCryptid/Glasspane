@@ -72,11 +72,10 @@ static class Theme
 
     static Brush? _glass;
 
-    /// <summary>The Windows stand-in for glass: Fluent in-app acrylic, tinted by the theme.</summary>
+    /// <summary>The Windows stand-in for glass: a translucent layer that blends with the window's Mica/Acrylic backdrop.</summary>
     public static Brush Glass() => _glass ??= (Brush)XamlReader.Load(
-        "<AcrylicBrush xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
-        "TintColor=\"{ThemeResource SolidBackgroundFillColorBase}\" TintOpacity=\"0.45\" TintLuminosityOpacity=\"0.85\" " +
-        "FallbackColor=\"{ThemeResource SolidBackgroundFillColorSecondary}\"/>");
+        "<SolidColorBrush xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
+        "Color=\"{ThemeResource CardBackgroundFillColorDefault}\"/>");
 
     public static Color? ParseColor(string spec)
     {

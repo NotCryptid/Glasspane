@@ -69,10 +69,77 @@ public sealed partial class Reconciler
         Border => Border.BorderThicknessProperty, _ => null,
     };
 
+    static readonly FontFamily FluentFont = new("Segoe Fluent Icons,Segoe MDL2 Assets");
+
+    // Extended Windows 11 Segoe Fluent Icons not present in the legacy WinUI Symbol enum.
+    static readonly Dictionary<string, char> FluentGlyphs = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Heart"] = '\uEB51',
+        ["HeartFill"] = '\uEB52',
+        ["Palette"] = '\uE790',
+        ["Color"] = '\uE790',
+        ["Moon"] = '\uE708',
+        ["Sun"] = '\uE706',
+        ["Sparkles"] = '\uE708',
+        ["Lock"] = '\uE72E',
+        ["Unlock"] = '\uE785',
+        ["Bell"] = '\uEA8F',
+        ["Info"] = '\uE946',
+        ["Warning"] = '\uE7BA',
+        ["Error"] = '\uEA39',
+        ["ChevronLeft"] = '\uE76B',
+        ["ChevronRight"] = '\uE76C',
+        ["ChevronUp"] = '\uE70E',
+        ["ChevronDown"] = '\uE70D',
+        ["Checkmark"] = '\uE73E',
+        ["Close"] = '\uE711',
+        ["Search"] = '\uE721',
+        ["Eye"] = '\uE7B3',
+        ["EyeOff"] = '\uED1A',
+        ["Sliders"] = '\uE713',
+        ["Grid"] = '\uE80A',
+        ["Sidebar"] = '\uE700',
+        ["Code"] = '\uE943',
+        ["Terminal"] = '\uE756',
+        ["Bug"] = '\uEBE8',
+        ["Wifi"] = '\uE701',
+        ["Bluetooth"] = '\uE702',
+        ["Battery"] = '\uE83F',
+        ["Power"] = '\uE7E8',
+        ["Shield"] = '\uEA18',
+    };
+
+    static FontIcon? CreateIcon(string? icon, double? fontSize = null, Brush? foreground = null)
+    {
+        if (string.IsNullOrEmpty(icon)) return null;
+        string? glyph = null;
+        if (FluentGlyphs.TryGetValue(icon, out var ch)) glyph = ch.ToString();
+        else if (Enum.TryParse<Symbol>(icon, true, out var sym)) glyph = ((char)sym).ToString();
+        else if (icon.Length == 1) glyph = icon;
+        if (glyph == null) return null;
+        var fi = new FontIcon { FontFamily = FluentFont, Glyph = glyph, FontSize = fontSize ?? 16 };
+        if (foreground != null) fi.Foreground = foreground;
+        return fi;
+    }
+
+    // WinUI's CornerRadius clamps X and Y radii independently, turning large radii (like glass(100)
+    // on a search pill) into an ellipse instead of a capsule. Clamping to half the smaller dimension
+    // produces circular end-caps like SwiftUI and CSS.
+    static void ApplyCornerRadius(FrameworkElement fe, double? cr)
+    {
+        var dp = CornerDp(fe);
+        if (dp == null) return;
+        if (cr == null) { fe.ClearValue(dp); return; }
+        var r = cr.Value;
+        if (fe.ActualWidth > 0 && fe.ActualHeight > 0)
+            r = Math.Min(r, Math.Min(fe.ActualWidth, fe.ActualHeight) / 2.0);
+        fe.SetValue(dp, new CornerRadius(r));
+    }
+
     void ApplyProps(UIElement el, string t, JsonObject p, Meta m)
     {
         var fe = (FrameworkElement)el;
-        ApplyCommon(fe, p);
+        ApplyCommon(fe, p, m);
         DependencyObject styleTarget = el;
 
         switch (t)
@@ -104,6 +171,25 @@ public sealed partial class Reconciler
                 tb.PlaceholderText = J.Str(p, "placeholder") ?? "";
                 tb.Header = J.Str(p, "label");
                 tb.IsReadOnly = J.Bool(p, "readOnly") ?? false;
+                if (J.Str(p, "style") == "plain")
+                {
+                    var clear = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                    if (!J.Has(p, "background")) tb.Background = clear;
+                    if (!J.Has(p, "border")) tb.BorderThickness = new Thickness(0);
+                    if (!J.Has(p, "padding")) tb.Padding = new Thickness(0);
+                    tb.MinHeight = 0;
+                    tb.MinWidth = 0;
+                    tb.VerticalAlignment = VerticalAlignment.Center;
+                    tb.VerticalContentAlignment = VerticalAlignment.Center;
+                    tb.Resources["TextControlBackground"] = clear;
+                    tb.Resources["TextControlBackgroundPointerOver"] = clear;
+                    tb.Resources["TextControlBackgroundFocused"] = clear;
+                    tb.Resources["TextControlBorderBrush"] = clear;
+                    tb.Resources["TextControlBorderBrushPointerOver"] = clear;
+                    tb.Resources["TextControlBorderBrushFocused"] = clear;
+                    tb.Resources["TextControlBorderThemeThickness"] = new Thickness(0);
+                    tb.Resources["TextControlBorderThemeThicknessFocused"] = new Thickness(0);
+                }
                 break;
             }
             case "SecureField":
@@ -168,9 +254,8 @@ public sealed partial class Reconciler
             case "Icon":
             {
                 var icon = J.Str(p, "name");
-                SymbolIcon? si = icon != null && Enum.TryParse<Symbol>(icon, true, out var sym) ? new SymbolIcon(sym) : null;
-                if (si != null && Theme.Brush(J.Str(p, "foreground")) is { } fg) si.Foreground = fg;
-                ((Border)el).Child = si;
+                var fg = Theme.Brush(J.Str(p, "foreground"), forText: true);
+                ((Border)el).Child = CreateIcon(icon, J.Num(p, "fontSize"), fg);
                 break;
             }
             case "Divider":
@@ -203,7 +288,7 @@ public sealed partial class Reconciler
         ApplyTextStyle(styleTarget, p);
     }
 
-    void ApplyCommon(FrameworkElement fe, JsonObject p)
+    void ApplyCommon(FrameworkElement fe, JsonObject p, Meta m)
     {
         Set(fe, FrameworkElement.WidthProperty, J.Num(p, "width"));
         Set(fe, FrameworkElement.HeightProperty, J.Num(p, "height"));
@@ -220,11 +305,21 @@ public sealed partial class Reconciler
         ToolTipService.SetToolTip(fe, J.Str(p, "tooltip"));
 
         Set(fe, PaddingDp(fe), Thick(p["padding"]));
-        // `glass` is acrylic with a hairline edge here; macOS draws Liquid Glass.
+        // `glass` is a translucent surface with a hairline edge here; macOS draws Liquid Glass.
         var glass = J.Num(p, "glass");
         Set(fe, BackgroundDp(fe), Theme.Brush(J.Str(p, "background")) ?? (glass != null ? Theme.Glass() : null));
-        Set(fe, CornerDp(fe), J.Num(p, "cornerRadius") is { } cr ? new CornerRadius(cr)
-            : glass is { } gr ? new CornerRadius(gr) : null);
+        var cr = J.Num(p, "cornerRadius") ?? glass;
+        m.CornerRadius = cr;
+        ApplyCornerRadius(fe, cr);
+        if (cr != null && !m.WiredSize)
+        {
+            m.WiredSize = true;
+            fe.SizeChanged += (s, _) =>
+            {
+                var elem = (FrameworkElement)s;
+                ApplyCornerRadius(elem, M(elem).CornerRadius);
+            };
+        }
         if (p["border"] is JsonObject b)
         {
             Set(fe, BorderBrushDp(fe), Theme.Brush(J.Str(b, "color") ?? "divider"));
@@ -272,7 +367,7 @@ public sealed partial class Reconciler
     {
         var text = J.Str(p, "text");
         var icon = J.Str(p, "icon");
-        IconElement? ie = icon != null && Enum.TryParse<Symbol>(icon, true, out var sym) ? new SymbolIcon(sym) : null;
+        IconElement? ie = CreateIcon(icon, J.Num(p, "fontSize") ?? 14);
         if (ie != null && !string.IsNullOrEmpty(text))
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };

@@ -1,7 +1,9 @@
 const fs = require('node:fs');
 const {
-  App, state, system, VStack, HStack, Text, Button, TextField, Checkbox, ScrollView, ForEach, Divider, Spacer,
+  App, state, system, VStack, HStack, Text, Icon, Button, TextField, Checkbox, ScrollView, ForEach, Divider, Spacer,
 } = require('..');
+
+const R = system.cornerRadiusMultiplier;
 
 let nextId = 3;
 const todos = state([
@@ -25,10 +27,13 @@ async function save() {
 App({ title: 'Todos', width: 520, height: 600 }, () => {
   const remaining = todos.value.filter((t) => !t.done).length;
   return VStack(
-    Text('Todos').font('largeTitle'),
+    HStack(
+      Icon('check').font(24).foreground('accent'),
+      Text('Todos').font('largeTitle'),
+    ).alignment('center').spacing(10),
     HStack(
       TextField('What needs doing?', draft).onSubmit(add).flex(),
-      Button('Add', add).icon('Add').style('accent'),
+      Button('Add', add).icon('add').style('accent'),
     ).alignment('center'),
     ScrollView(
       VStack(
@@ -39,15 +44,16 @@ App({ title: 'Todos', width: 520, height: 600 }, () => {
               if (await system.confirm(`Delete "${t.text}"?`, { title: 'Delete todo', ok: 'Delete' })) {
                 todos.value = todos.value.filter((x) => x.id !== t.id);
               }
-            }).icon('Delete').tooltip('Delete'),
-          )),
+            }).icon('delete').tooltip('Delete'),
+          ).padding({ x: 8, y: 4 }).cornerRadius(12 * R)),
       ).alignment('stretch').spacing(4),
     ).flex(),
     Divider(),
     HStack(
       Text(`${remaining} left`).foreground('secondary'),
       Spacer(),
-      Button('Save…', save),
+      Button('Save…', save).icon('save'),
     ),
   ).alignment('stretch').spacing(12).padding(24);
 });
+
