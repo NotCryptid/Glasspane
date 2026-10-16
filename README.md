@@ -1,4 +1,4 @@
-![Alt Text](logo.svg)
+![Glasspane Logo](https://raw.githubusercontent.com/NotCryptid/Glasspane/refs/heads/main/logo.svg)
 ---
 
 Build native desktop apps in JavaScript. You describe the UI with a SwiftUI-style API, and Glasspane renders it with WinUI 3 on Windows and SwiftUI on macOS. Your code runs on Node.js, so `fs`, `fetch`, databases and npm packages all work in event handlers.
