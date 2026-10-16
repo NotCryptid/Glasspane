@@ -20,7 +20,8 @@ sealed class Meta
     public HashSet<string> WiredNative = new();
     public string? PickerSig;
     public double? CornerRadius;
-    public bool WiredSize;
+        public bool WiredSize;
+    public bool WiredTap;
 }
 
 /// <summary>
@@ -63,6 +64,22 @@ public sealed partial class Reconciler
         if (node["e"] is JsonObject ev)
             foreach (var (k, v) in ev)
                 if (v is JsonValue jv && jv.TryGetValue<string>(out var id)) m.Events[k] = id;
+
+        if (!m.WiredTap && m.Events.ContainsKey("tap"))
+        {
+            m.WiredTap = true;
+            el.PointerPressed += (_, e) =>
+            {
+                if (e.GetCurrentPoint(el).Properties.IsLeftButtonPressed)
+                {
+                    if (M(el).Events.ContainsKey("tap"))
+                    {
+                        Fire(el, "tap", null);
+                        e.Handled = true;
+                    }
+                }
+            };
+        }
 
         var t = J.Str(node, "t") ?? "Text";
         var p = node["p"] as JsonObject ?? new JsonObject();
@@ -109,8 +126,9 @@ public sealed partial class Reconciler
             case "Native": el = CreateNative(J.Str(node["p"], "type")); break;
             default: throw new InvalidOperationException("Unknown view type: " + t);
         }
+        el.IsDoubleTapEnabled = false;
         M(el).TypeKey = tk;
-        Wire(el, t!);
+        Wire(el);
         return el;
     }
 
@@ -123,7 +141,7 @@ public sealed partial class Reconciler
         if (m.Events.TryGetValue(evt, out var id)) _emit(id, value);
     }
 
-    void Wire(UIElement el, string t)
+    void Wire(UIElement el)
     {
         switch (el)
         {
@@ -149,14 +167,6 @@ public sealed partial class Reconciler
                 nb.ValueChanged += (_, e) => { if (!double.IsNaN(e.NewValue)) Fire(nb, "change", e.NewValue); };
                 break;
             case ListView lv: lv.SelectionChanged += (_, _) => Fire(lv, "select", lv.SelectedIndex); break;
-        }
-        if (t is "VStack" or "HStack" or "ZStack" or "Card" or "Text" or "Image")
-        {
-            var fe = (FrameworkElement)el;
-            fe.Tapped += (_, e) =>
-            {
-                if (M(el).Events.ContainsKey("tap")) { Fire(el, "tap", null); e.Handled = true; }
-            };
         }
     }
 }

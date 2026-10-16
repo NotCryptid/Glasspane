@@ -198,14 +198,16 @@ public sealed class HostApp : Application, IXamlMetadataProvider
             }
         }
 
-        // The app's menu bar, rebuilt only when its description changes.
+        // The app's menu bar, synced in-place when only item state/handlers change.
         var menu = w["menu"] as JsonArray;
         var menuJson = menu?.ToJsonString() ?? "";
         if (menuJson != hw.LastMenu)
         {
             hw.LastMenu = menuJson;
-            hw.MenuSlot.Content = menu == null ? null
-                : AppMenu.Build(menu, id => hw.Emit(id, null), role => RunRole(hw, role));
+            var nextMenu = menu == null ? null
+                : AppMenu.Sync(hw.MenuSlot.Content as MenuBar, menu, id => hw.Emit(id, null), role => RunRole(hw, role));
+            if (!ReferenceEquals(hw.MenuSlot.Content, nextMenu))
+                hw.MenuSlot.Content = nextMenu;
         }
 
         hw.Root.RequestedTheme = J.Str(w, "theme") switch

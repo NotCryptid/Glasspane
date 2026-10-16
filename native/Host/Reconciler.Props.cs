@@ -69,8 +69,6 @@ public sealed partial class Reconciler
         Border => Border.BorderThicknessProperty, _ => null,
     };
 
-    static readonly FontFamily FluentFont = new("Segoe Fluent Icons,Segoe MDL2 Assets");
-
     // Extended Windows 11 Segoe Fluent Icons not present in the legacy WinUI Symbol enum.
     static readonly Dictionary<string, char> FluentGlyphs = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -109,16 +107,25 @@ public sealed partial class Reconciler
         ["Shield"] = '\uEA18',
     };
 
-    static FontIcon? CreateIcon(string? icon, double? fontSize = null, Brush? foreground = null)
+    static string? ResolveGlyph(string? icon)
     {
         if (string.IsNullOrEmpty(icon)) return null;
-        string? glyph = null;
-        if (FluentGlyphs.TryGetValue(icon, out var ch)) glyph = ch.ToString();
-        else if (Enum.TryParse<Symbol>(icon, true, out var sym)) glyph = ((char)sym).ToString();
-        else if (icon.Length == 1) glyph = icon;
+        if (FluentGlyphs.TryGetValue(icon, out var ch)) return ch.ToString();
+        if (Enum.TryParse<Symbol>(icon, true, out var sym)) return ((char)sym).ToString();
+        if (icon.Length == 1) return icon;
+        return null;
+    }
+
+    static FontIcon? UpdateIcon(FontIcon? existing, string? icon, double? fontSize = null, Brush? foreground = null)
+    {
+        var glyph = ResolveGlyph(icon);
         if (glyph == null) return null;
-        var fi = new FontIcon { FontFamily = FluentFont, Glyph = glyph, FontSize = fontSize ?? 16 };
+        var fi = existing ?? new FontIcon();
+        if (fi.Glyph != glyph) fi.Glyph = glyph;
+        var size = fontSize ?? 16;
+        if (fi.FontSize != size) fi.FontSize = size;
         if (foreground != null) fi.Foreground = foreground;
+        else fi.ClearValue(IconElement.ForegroundProperty);
         return fi;
     }
 
@@ -129,11 +136,17 @@ public sealed partial class Reconciler
     {
         var dp = CornerDp(fe);
         if (dp == null) return;
-        if (cr == null) { fe.ClearValue(dp); return; }
+        if (cr == null)
+        {
+            if (fe.ReadLocalValue(dp) != DependencyProperty.UnsetValue) fe.ClearValue(dp);
+            return;
+        }
         var r = cr.Value;
         if (fe.ActualWidth > 0 && fe.ActualHeight > 0)
             r = Math.Min(r, Math.Min(fe.ActualWidth, fe.ActualHeight) / 2.0);
-        fe.SetValue(dp, new CornerRadius(r));
+        var next = new CornerRadius(r);
+        if (fe.GetValue(dp) is CornerRadius cur && cur == next) return;
+        fe.SetValue(dp, next);
     }
 
     void ApplyProps(UIElement el, string t, JsonObject p, Meta m)
@@ -253,9 +266,11 @@ public sealed partial class Reconciler
                 break;
             case "Icon":
             {
+                var border = (Border)el;
                 var icon = J.Str(p, "name");
                 var fg = Theme.Brush(J.Str(p, "foreground"), forText: true);
-                ((Border)el).Child = CreateIcon(icon, J.Num(p, "fontSize"), fg);
+                var nextIcon = UpdateIcon(border.Child as FontIcon, icon, J.Num(p, "fontSize"), fg);
+                if (!ReferenceEquals(border.Child, nextIcon)) border.Child = nextIcon;
                 break;
             }
             case "Divider":
@@ -307,11 +322,12 @@ public sealed partial class Reconciler
         Set(fe, PaddingDp(fe), Thick(p["padding"]));
         // `glass` is a translucent surface with a hairline edge here; macOS draws Liquid Glass.
         var glass = J.Num(p, "glass");
-        Set(fe, BackgroundDp(fe), Theme.Brush(J.Str(p, "background")) ?? (glass != null ? Theme.Glass() : null));
+        var bg = Theme.Brush(J.Str(p, "background")) ?? (glass != null ? Theme.Glass() : (m.Events.ContainsKey("tap") ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : null));
+        Set(fe, BackgroundDp(fe), bg);
         var cr = J.Num(p, "cornerRadius") ?? glass;
         m.CornerRadius = cr;
         ApplyCornerRadius(fe, cr);
-        if (cr != null && !m.WiredSize)
+        if (cr > 20 && !m.WiredSize)
         {
             m.WiredSize = true;
             fe.SizeChanged += (s, _) =>
@@ -337,12 +353,25 @@ public sealed partial class Reconciler
         }
     }
 
+    static readonly Dictionary<string, FontFamily> FontCache = new(StringComparer.OrdinalIgnoreCase);
+    static readonly Dictionary<Uri, BitmapImage> ImageCache = new();
+
+    static FontFamily GetFontFamily(string name)
+    {
+        if (!FontCache.TryGetValue(name, out var ff))
+        {
+            ff = new FontFamily(name);
+            FontCache[name] = ff;
+        }
+        return ff;
+    }
+
     static void ApplyTextStyle(DependencyObject target, JsonObject p)
     {
         var brush = Theme.Brush(J.Str(p, "foreground"), forText: true);
         object? weight = J.Num(p, "fontWeight") is { } w ? new FontWeight { Weight = (ushort)w } : null;
         object? style = J.Bool(p, "italic") == true ? Windows.UI.Text.FontStyle.Italic : null;
-        object? family = J.Str(p, "fontFamily") is { } f ? new FontFamily(f) : null;
+        object? family = J.Str(p, "fontFamily") is { } f ? GetFontFamily(f) : null;
         var size = J.Num(p, "fontSize");
         switch (target)
         {
@@ -367,29 +396,59 @@ public sealed partial class Reconciler
     {
         var text = J.Str(p, "text");
         var icon = J.Str(p, "icon");
-        IconElement? ie = CreateIcon(icon, J.Num(p, "fontSize") ?? 14);
-        if (ie != null && !string.IsNullOrEmpty(text))
+        var fontSize = J.Num(p, "fontSize") ?? 14;
+        var hasIcon = !string.IsNullOrEmpty(ResolveGlyph(icon));
+        var hasText = !string.IsNullOrEmpty(text);
+
+        if (hasIcon && hasText)
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            row.Children.Add(ie);
-            row.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
-            b.Content = row;
+            if (b.Content is StackPanel existingRow && existingRow.Children.Count == 2
+                && existingRow.Children[0] is FontIcon existingFi && existingRow.Children[1] is TextBlock existingTb)
+            {
+                UpdateIcon(existingFi, icon, fontSize);
+                if (existingTb.Text != text) existingTb.Text = text!;
+            }
+            else
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+                row.Children.Add(UpdateIcon(null, icon, fontSize)!);
+                row.Children.Add(new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center });
+                b.Content = row;
+            }
         }
-        else b.Content = (object?)ie ?? text;
+        else if (hasIcon)
+        {
+            b.Content = UpdateIcon(b.Content as FontIcon, icon, fontSize);
+        }
+        else
+        {
+            if (!Equals(b.Content, text)) b.Content = text;
+        }
+
         // Icon buttons would otherwise be nameless to screen readers.
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(b,
-            !string.IsNullOrEmpty(text) ? text : J.Str(p, "tooltip") ?? icon ?? "");
+            hasText ? text : J.Str(p, "tooltip") ?? icon ?? "");
 
-        if (J.Str(p, "style") == "accent") b.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
-        else b.ClearValue(FrameworkElement.StyleProperty);
+        var accent = J.Str(p, "style") == "accent";
+        var accentStyle = accent ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
+        if (accent && !ReferenceEquals(b.Style, accentStyle)) b.Style = accentStyle;
+        else if (!accent && b.ReadLocalValue(FrameworkElement.StyleProperty) != DependencyProperty.UnsetValue)
+            b.ClearValue(FrameworkElement.StyleProperty);
     }
 
     static void ApplyImage(Image img, JsonObject p)
     {
         var src = J.Str(p, "source");
         if (src == null) img.Source = null;
-        else if (Uri.TryCreate(src, UriKind.Absolute, out var uri) && (img.Source as BitmapImage)?.UriSource != uri)
-            img.Source = new BitmapImage(uri);
+        else if (Uri.TryCreate(src, UriKind.Absolute, out var uri))
+        {
+            if (!ImageCache.TryGetValue(uri, out var bmp))
+            {
+                bmp = new BitmapImage(uri);
+                ImageCache[uri] = bmp;
+            }
+            if (!ReferenceEquals(img.Source, bmp)) img.Source = bmp;
+        }
         img.Stretch = J.Str(p, "fit") switch
         {
             "fill" => Stretch.Fill, "cover" => Stretch.UniformToFill, "none" => Stretch.None, _ => Stretch.Uniform,

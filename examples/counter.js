@@ -10,9 +10,9 @@ App({ title: 'Counter', width: 480, height: 560 }, () =>
   VStack(
     Text(`Count: ${count.value}`).font('largeTitle'),
     HStack(
-      Button('', () => count.value--).icon('minus').tooltip('Decrement').width(48),
-      Button('Reset', () => { count.value = 0; }).icon('refresh'),
-      Button('', () => count.value++).icon('plus').tooltip('Increment').style('accent').width(48),
+      Button('', () => count.value--).icon('minus').tooltip('Decrement').width(48).height(32),
+      Button('Reset', () => { count.value = 0; }).icon('refresh').height(32),
+      Button('', () => count.value++).icon('plus').tooltip('Increment').style('accent').width(48).height(32),
     ),
     TextField('Your name', name).width(260),
     Text(name.value ? `Hello, ${loud.value ? name.value.toUpperCase() : name.value}!` : 'Type your name above')

@@ -25,8 +25,17 @@ function buildMac() {
 
 function buildWindows() {
   const arm = process.arch === 'arm64';
-  const project = path.resolve(__dirname, '..', 'native', 'Host', 'Glasspane.csproj');
-  const out = path.resolve(__dirname, '..', 'native', 'Host', 'bin', 'publish');
+  const hostDir = path.resolve(__dirname, '..', 'native', 'Host');
+  const project = path.join(hostDir, 'Glasspane.csproj');
+  const out = path.join(hostDir, 'bin', 'publish');
+  const objDir = path.join(hostDir, 'obj');
+  if (fs.existsSync(objDir)) {
+    for (const p of fs.readdirSync(objDir, { recursive: true })) {
+      if (path.basename(String(p)) === 'Manifests') {
+        fs.rmSync(path.join(objDir, String(p)), { recursive: true, force: true });
+      }
+    }
+  }
 
   const args = [
     'publish', project, '-c', 'Release',

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -6,22 +7,119 @@ using Windows.System;
 
 namespace Glasspane.Host;
 
-/// <summary>Builds the window's MenuBar from the JSON that lib/menu.js produces.</summary>
+sealed class MenuItemMeta
+{
+    public string? ClickId;
+    public string? Role;
+    public string? Accel;
+}
+
+/// <summary>Builds and updates the window's MenuBar from the JSON that lib/menu.js produces.</summary>
 static class AppMenu
 {
-    /// <param name="emit">Sends a click back to JS by handler id.</param>
-    /// <param name="role">Runs a standard item (Copy, Minimize, ...).</param>
-    public static MenuBar? Build(JsonArray menus, Action<string> emit, Action<string> role)
+    static readonly ConditionalWeakTable<MenuFlyoutItemBase, MenuItemMeta> Metas = new();
+
+    /// <summary>
+    /// Updates <paramref name="existing"/> in-place if the menu structure matches, or builds a new
+    /// <see cref="MenuBar"/> only when menus/items are added or removed. Avoiding MenuBar teardown
+    /// prevents WinUI 3 KeyboardAccelerator registration crashes under rapid state updates.
+    /// </summary>
+    public static MenuBar? Sync(MenuBar? existing, JsonArray menus, Action<string> emit, Action<string> role)
     {
-        var bar = new MenuBar { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
-        foreach (var m in menus.OfType<JsonObject>())
+        var validMenus = menus.OfType<JsonObject>()
+            .Where(m => m["items"] is JsonArray kids && kids.Count > 0)
+            .ToList();
+        if (validMenus.Count == 0) return null;
+
+        if (existing != null && CanSyncBar(existing, validMenus))
         {
-            if (m["items"] is not JsonArray kids || kids.Count == 0) continue;
+            for (int i = 0; i < validMenus.Count; i++)
+            {
+                var m = validMenus[i];
+                var top = existing.Items[i];
+                var title = J.Str(m, "label") ?? "";
+                if (top.Title != title) top.Title = title;
+                var kids = ((JsonArray)m["items"]!).OfType<JsonObject>().ToList();
+                SyncItems(top.Items, kids);
+            }
+            return existing;
+        }
+
+        var bar = new MenuBar { HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        foreach (var m in validMenus)
+        {
+            var kids = ((JsonArray)m["items"]!).OfType<JsonObject>().ToList();
             var top = new MenuBarItem { Title = J.Str(m, "label") ?? "" };
-            foreach (var k in kids.OfType<JsonObject>()) top.Items.Add(Item(k, emit, role));
+            foreach (var k in kids) top.Items.Add(Item(k, emit, role));
             bar.Items.Add(top);
         }
-        return bar.Items.Count > 0 ? bar : null;
+        return bar;
+    }
+
+    static bool CanSyncBar(MenuBar bar, List<JsonObject> menus)
+    {
+        if (bar.Items.Count != menus.Count) return false;
+        for (int i = 0; i < menus.Count; i++)
+        {
+            var kids = ((JsonArray)menus[i]["items"]!).OfType<JsonObject>().ToList();
+            if (!CanSyncItems(bar.Items[i].Items, kids)) return false;
+        }
+        return true;
+    }
+
+    static bool CanSyncItems(IList<MenuFlyoutItemBase> existing, List<JsonObject> specs)
+    {
+        if (existing.Count != specs.Count) return false;
+        for (int i = 0; i < specs.Count; i++)
+        {
+            var d = specs[i];
+            var el = existing[i];
+            if (J.Bool(d, "separator") == true)
+            {
+                if (el is not MenuFlyoutSeparator) return false;
+                continue;
+            }
+            if (d["items"] is JsonArray subKids)
+            {
+                if (el is not MenuFlyoutSubItem sub) return false;
+                if (!CanSyncItems(sub.Items, subKids.OfType<JsonObject>().ToList())) return false;
+                continue;
+            }
+            bool isToggle = J.Bool(d, "checked") != null;
+            if (isToggle != (el is ToggleMenuFlyoutItem)) return false;
+            if (!isToggle && el is not MenuFlyoutItem) return false;
+            var meta = Metas.GetOrCreateValue(el);
+            if (meta.Accel != J.Str(d, "accel")) return false;
+        }
+        return true;
+    }
+
+    static void SyncItems(IList<MenuFlyoutItemBase> existing, List<JsonObject> specs)
+    {
+        for (int i = 0; i < specs.Count; i++)
+        {
+            var d = specs[i];
+            var el = existing[i];
+            if (el is MenuFlyoutSeparator) continue;
+            var text = J.Str(d, "label") ?? "";
+            if (el is MenuFlyoutSubItem sub && d["items"] is JsonArray subKids)
+            {
+                if (sub.Text != text) sub.Text = text;
+                SyncItems(sub.Items, subKids.OfType<JsonObject>().ToList());
+                continue;
+            }
+            if (el is MenuFlyoutItem item)
+            {
+                if (item.Text != text) item.Text = text;
+                if (item is ToggleMenuFlyoutItem toggle && J.Bool(d, "checked") is { } on && toggle.IsChecked != on)
+                    toggle.IsChecked = on;
+                var meta = Metas.GetOrCreateValue(item);
+                meta.Role = J.Str(d, "role");
+                meta.ClickId = J.Str(d, "click");
+                var enabled = J.Bool(d, "enabled") != false && (meta.Role != null || meta.ClickId != null);
+                if (item.IsEnabled != enabled) item.IsEnabled = enabled;
+            }
+        }
     }
 
     static MenuFlyoutItemBase Item(JsonObject d, Action<string> emit, Action<string> role)
@@ -39,13 +137,20 @@ static class AppMenu
         MenuFlyoutItem item = J.Bool(d, "checked") is { } on
             ? new ToggleMenuFlyoutItem { Text = text, IsChecked = on }
             : new MenuFlyoutItem { Text = text };
-        item.IsEnabled = J.Bool(d, "enabled") != false;
+        var meta = Metas.GetOrCreateValue(item);
+        meta.Role = J.Str(d, "role");
+        meta.ClickId = J.Str(d, "click");
+        meta.Accel = J.Str(d, "accel");
+        item.IsEnabled = J.Bool(d, "enabled") != false && (meta.Role != null || meta.ClickId != null);
 
-        if (J.Str(d, "role") is { } r) item.Click += (_, _) => role(r);
-        else if (J.Str(d, "click") is { } id) item.Click += (_, _) => emit(id);
-        else item.IsEnabled = false;
+        item.Click += (s, _) =>
+        {
+            var m = Metas.GetOrCreateValue((MenuFlyoutItemBase)s);
+            if (m.Role != null) role(m.Role);
+            else if (m.ClickId != null) emit(m.ClickId);
+        };
 
-        if (J.Str(d, "accel") is { } accel && Accelerator(accel) is { } ka) item.KeyboardAccelerators.Add(ka);
+        if (meta.Accel is { } accel && Accelerator(accel) is { } ka) item.KeyboardAccelerators.Add(ka);
         return item;
     }
 

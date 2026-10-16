@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Threading.Channels;
 using Microsoft.UI.Dispatching;
 
 namespace Glasspane.Host;
@@ -15,8 +16,7 @@ public static class Bridge
     static Process? _node;
     static DispatcherQueue? _ui;
     static Action<JsonObject>? _onMessage;
-    static readonly object WriteLock = new();
-    static readonly StringBuilder Inbound = new();
+    static readonly Channel<string> Outbound = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
 
     public static void Log(string text)
     {
@@ -48,6 +48,21 @@ public static class Bridge
         _ui = ui;
         _onMessage = onMessage;
         _node = Process.Start(psi) ?? throw new InvalidOperationException("Could not start Node: " + exe);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var stdin = _node.StandardInput;
+                await foreach (var line in Outbound.Reader.ReadAllAsync())
+                {
+                    if (_node.HasExited) break;
+                    await stdin.WriteAsync(line);
+                    if (!Outbound.Reader.TryPeek(out _)) await stdin.FlushAsync();
+                }
+            }
+            catch (Exception e) { Log("send failed: " + e.Message); }
+        });
 
         // stdout carries framed JSON only; anything a script prints must go to stderr so it cannot
         // corrupt the protocol. Console output is forwarded to the parent's stderr.
@@ -89,6 +104,9 @@ public static class Bridge
             "Could not find node.exe. Install Node.js, or set GLASSPANE_NODE to its full path.");
     }
 
+    static readonly object RenderLock = new();
+    static readonly Dictionary<long, JsonObject> PendingRenders = new();
+
     static void Dispatch(string line)
     {
         JsonObject? msg;
@@ -96,6 +114,30 @@ public static class Bridge
         catch (Exception e) { Log("bad message: " + e.Message); return; }
         var ui = _ui;
         if (msg == null || ui == null) return;
+
+        if (J.Str(msg, "type") == "render")
+        {
+            var winId = (long)(J.Num(msg, "window") ?? 0);
+            bool shouldEnqueue;
+            lock (RenderLock)
+            {
+                shouldEnqueue = !PendingRenders.ContainsKey(winId);
+                PendingRenders[winId] = msg;
+            }
+            if (!shouldEnqueue) return;
+            ui.TryEnqueue(() =>
+            {
+                JsonObject? latest;
+                lock (RenderLock)
+                {
+                    if (!PendingRenders.Remove(winId, out latest)) return;
+                }
+                try { _onMessage?.Invoke(latest); }
+                catch (Exception e) { Log("handler error: " + e); }
+            });
+            return;
+        }
+
         ui.TryEnqueue(() =>
         {
             try { _onMessage?.Invoke(msg); }
@@ -103,21 +145,11 @@ public static class Bridge
         });
     }
 
-    /// <summary>Delivers a message to the Node side.</summary>
+    /// <summary>Delivers a message to the Node side without blocking the UI thread.</summary>
     public static void Send(JsonObject msg)
     {
         var node = _node;
         if (node == null || node.HasExited) return;
-        var json = msg.ToJsonString() + "\n";
-        lock (WriteLock)
-        {
-            try
-            {
-                var stdout = node.StandardInput;
-                stdout.Write(json);
-                stdout.Flush();
-            }
-            catch (Exception e) { Log("send failed: " + e.Message); }
-        }
+        Outbound.Writer.TryWrite(msg.ToJsonString() + "\n");
     }
 }

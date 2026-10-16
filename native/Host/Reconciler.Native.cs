@@ -13,18 +13,26 @@ namespace Glasspane.Host;
 /// </summary>
 public sealed partial class Reconciler
 {
+    static readonly Dictionary<string, Type> TypeCache = new(StringComparer.Ordinal);
+
     static Type ResolveType(string? name)
     {
-        if (string.IsNullOrEmpty(name)) throw new InvalidOperationException("Native view needs a type name.");
+        if (string.IsNullOrWhiteSpace(name)) throw new InvalidOperationException("Native view needs a type name.");
+        if (TypeCache.TryGetValue(name, out var cached)) return cached;
         var candidates = name.Contains('.')
             ? new[] { name }
             : new[] { "Microsoft.UI.Xaml.Controls." + name, "Microsoft.UI.Xaml.Shapes." + name, "Microsoft.UI.Xaml.Controls.Primitives." + name };
         foreach (var c in candidates)
         {
-            var t = Type.GetType(c + ", Microsoft.WinUI") ?? Type.GetType(c);
-            if (t != null) return t;
+            // Only resolve types from Microsoft.WinUI that derive from UIElement.
+            var t = Type.GetType(c + ", Microsoft.WinUI");
+            if (t != null && typeof(UIElement).IsAssignableFrom(t))
+            {
+                TypeCache[name] = t;
+                return t;
+            }
         }
-        throw new InvalidOperationException($"Unknown WinUI type '{name}'.");
+        throw new InvalidOperationException($"Unknown WinUI UIElement type '{name}'.");
     }
 
     static UIElement CreateNative(string? typeName)

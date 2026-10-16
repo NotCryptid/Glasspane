@@ -60,7 +60,7 @@ const tile = (p) => ZStack(
   Image(art('scrim')).fit('fill').height(TILE).fillWidth(),
   Text(p.title).font('headline').foreground('white').hAlign('start').vAlign('end').padding(14),
   favs.value.includes(p.id) ? Icon('heartFilled').font(14).foreground('white').hAlign('end').vAlign('start').padding(12) : null,
-).cornerRadius(18 * R).flex(1).onTap(() => toggleFav(p.id));
+).id(p.id).cornerRadius(18 * R).flex(1).onTap(() => toggleFav(p.id));
 
 const rows = (photos) => {
   const out = [];

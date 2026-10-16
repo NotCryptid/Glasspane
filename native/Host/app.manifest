@@ -12,4 +12,10 @@
       <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">true</longPathAware>
     </windowsSettings>
   </application>
+  <file name="Microsoft.UI.Input.dll" xmlns="urn:schemas-microsoft-com:asm.v3">
+    <activatableClass name="Microsoft.UI.Input.Experimental.ExpPointerPoint" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1" />
+    <activatableClass name="Microsoft.UI.Input.Experimental.ExpInputSite" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1" />
+    <activatableClass name="Microsoft.UI.Input.Partner.PartnerPointerPoint" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1" />
+    <activatableClass name="Microsoft.UI.Content.Partner.ContentSitePartner" threadingModel="both" xmlns="urn:schemas-microsoft-com:winrt.v1" />
+  </file>
 </assembly>

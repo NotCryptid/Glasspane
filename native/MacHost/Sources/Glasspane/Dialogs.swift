@@ -16,7 +16,9 @@ enum Dialogs {
             NSPasteboard.general.setString(a["text"] as? String ?? "", forType: .string)
             return NSNull()
         case "launch":
-            guard let s = a["uri"] as? String, let url = URL(string: s) else { return false }
+            guard let s = a["uri"] as? String, let url = URL(string: s),
+                  let scheme = url.scheme?.lowercased(),
+                  !["file", "javascript", "vbscript", "data"].contains(scheme) else { return false }
             return NSWorkspace.shared.open(url)
         default:
             throw HostError("Unknown request: " + method)

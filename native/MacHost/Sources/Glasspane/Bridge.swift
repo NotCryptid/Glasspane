@@ -46,6 +46,9 @@ final class Bridge {
         try process.run()
     }
 
+    private let renderLock = NSLock()
+    private var pendingRenders: [Int: JSONDict] = [:]
+
     /// A message can arrive split across reads, so hold the tail until its newline shows up.
     private func ingest(_ data: Data) {
         buffer.append(data)
@@ -55,6 +58,23 @@ final class Bridge {
             if line.isEmpty { continue }
             guard let obj = try? JSONSerialization.jsonObject(with: line) as? JSONDict else {
                 Bridge.log("bad message from node")
+                continue
+            }
+            if (obj["type"] as? String) == "render" {
+                let wid = intValue(obj["window"]) ?? 0
+                renderLock.lock()
+                let shouldEnqueue = pendingRenders[wid] == nil
+                pendingRenders[wid] = obj
+                renderLock.unlock()
+                if shouldEnqueue {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        self.renderLock.lock()
+                        let latest = self.pendingRenders.removeValue(forKey: wid)
+                        self.renderLock.unlock()
+                        if let latest = latest { self.onMessage(latest) }
+                    }
+                }
                 continue
             }
             DispatchQueue.main.async { [weak self] in self?.onMessage(obj) }
