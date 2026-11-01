@@ -176,7 +176,7 @@ public sealed partial class Reconciler
                 break;
             }
             case "Button":
-                ApplyButton((Button)el, p);
+                ApplyButton((Button)el, p, m);
                 break;
             case "TextField": case "TextEditor":
             {
@@ -228,21 +228,6 @@ public sealed partial class Reconciler
                 s.Minimum = J.Num(p, "min") ?? 0;
                 s.Maximum = J.Num(p, "max") ?? 100;
                 s.StepFrequency = J.Num(p, "step") ?? 1;
-                break;
-            }
-            case "Picker":
-            {
-                var c = (ComboBox)el;
-                c.Header = J.Str(p, "label");
-                c.PlaceholderText = J.Str(p, "placeholder") ?? "";
-                var opts = p["options"] as JsonArray;
-                var sig = opts?.ToJsonString() ?? "[]";
-                if (sig != m.PickerSig)
-                {
-                    m.PickerSig = sig;
-                    c.Items.Clear();
-                    if (opts != null) foreach (var o in opts) c.Items.Add(o?.GetValue<string>() ?? "");
-                }
                 break;
             }
             case "Stepper":
@@ -300,6 +285,7 @@ public sealed partial class Reconciler
                 ApplyNativeProps(el, p, m);
                 break;
         }
+        if (ApplySharedProps(el, t, p, m) is { } target) styleTarget = target;
         ApplyTextStyle(styleTarget, p);
     }
 
@@ -318,11 +304,13 @@ public sealed partial class Reconciler
         Set(fe, UIElement.VisibilityProperty, J.Bool(p, "hidden") == true ? Visibility.Collapsed : null);
         if (fe is Control) Set(fe, Control.IsEnabledProperty, J.Bool(p, "disabled") == true ? false : null);
         ToolTipService.SetToolTip(fe, J.Str(p, "tooltip"));
+        ApplyTransforms(fe, p);
 
         Set(fe, PaddingDp(fe), Thick(p["padding"]));
         // `glass` is a translucent surface with a hairline edge here; macOS draws Liquid Glass.
         var glass = J.Num(p, "glass");
-        var bg = Theme.Brush(J.Str(p, "background")) ?? (glass != null ? Theme.Glass() : (m.Events.ContainsKey("tap") ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : null));
+        var pointerTarget = m.Events.ContainsKey("tap") || m.Events.ContainsKey("hover") || m.Events.ContainsKey("doubleTap");
+        var bg = Theme.BrushFrom(p["background"]) ?? (glass != null ? Theme.Glass() : (pointerTarget ? new SolidColorBrush(Microsoft.UI.Colors.Transparent) : null));
         Set(fe, BackgroundDp(fe), bg);
         var cr = J.Num(p, "cornerRadius") ?? glass;
         m.CornerRadius = cr;
@@ -368,11 +356,12 @@ public sealed partial class Reconciler
 
     static void ApplyTextStyle(DependencyObject target, JsonObject p)
     {
-        var brush = Theme.Brush(J.Str(p, "foreground"), forText: true);
+        var brush = Theme.BrushFrom(p["foreground"], forText: true);
         object? weight = J.Num(p, "fontWeight") is { } w ? new FontWeight { Weight = (ushort)w } : null;
         object? style = J.Bool(p, "italic") == true ? Windows.UI.Text.FontStyle.Italic : null;
         object? family = J.Str(p, "fontFamily") is { } f ? GetFontFamily(f) : null;
         var size = J.Num(p, "fontSize");
+        object? spacing = J.Num(p, "tracking") is { } tr ? (int)(tr / (size ?? 14) * 1000) : null;
         switch (target)
         {
             case Control:
@@ -381,6 +370,7 @@ public sealed partial class Reconciler
                 Set(target, Control.FontStyleProperty, style);
                 Set(target, Control.FontFamilyProperty, family);
                 Set(target, Control.ForegroundProperty, brush);
+                Set(target, Control.CharacterSpacingProperty, spacing);
                 break;
             case TextBlock:
                 Set(target, TextBlock.FontSizeProperty, size);
@@ -388,11 +378,15 @@ public sealed partial class Reconciler
                 Set(target, TextBlock.FontStyleProperty, style);
                 Set(target, TextBlock.FontFamilyProperty, family);
                 Set(target, TextBlock.ForegroundProperty, brush);
+                Set(target, TextBlock.CharacterSpacingProperty, spacing);
+                var deco = (J.Bool(p, "underline") == true ? TextDecorations.Underline : TextDecorations.None)
+                         | (J.Bool(p, "strikethrough") == true ? TextDecorations.Strikethrough : TextDecorations.None);
+                Set(target, TextBlock.TextDecorationsProperty, deco == TextDecorations.None ? null : deco);
                 break;
         }
     }
 
-    static void ApplyButton(Button b, JsonObject p)
+    static void ApplyButton(Button b, JsonObject p, Meta m)
     {
         var text = J.Str(p, "text");
         var icon = J.Str(p, "icon");
@@ -427,13 +421,44 @@ public sealed partial class Reconciler
 
         // Icon buttons would otherwise be nameless to screen readers.
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(b,
-            hasText ? text : J.Str(p, "tooltip") ?? icon ?? "");
+            J.Str(p, "a11yLabel") ?? (hasText ? text : J.Str(p, "tooltip") ?? icon ?? ""));
 
-        var accent = J.Str(p, "style") == "accent";
-        var accentStyle = accent ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
-        if (accent && !ReferenceEquals(b.Style, accentStyle)) b.Style = accentStyle;
-        else if (!accent && b.ReadLocalValue(FrameworkElement.StyleProperty) != DependencyProperty.UnsetValue)
+        ApplyButtonStyle(b, J.Str(p, "style"), m);
+
+        var shortcut = J.Str(p, "shortcut");
+        if (shortcut != m.Shortcut)
+        {
+            m.Shortcut = shortcut;
+            b.KeyboardAccelerators.Clear();
+            if (shortcut != null && AppMenu.Accelerator(shortcut) is { } ka) b.KeyboardAccelerators.Add(ka);
+        }
+    }
+
+    /// <summary>'accent' is the filled button; 'plain' drops the fill and border; 'destructive' reddens the text.</summary>
+    static void ApplyButtonStyle(Button b, string? style, Meta m)
+    {
+        if (style == m.ButtonStyle) return;
+        m.ButtonStyle = style;
+        b.Resources.Clear();
+        var accentStyle = style == "accent" ? (Style)Application.Current.Resources["AccentButtonStyle"] : null;
+        if (accentStyle != null) b.Style = accentStyle;
+        else if (b.ReadLocalValue(FrameworkElement.StyleProperty) != DependencyProperty.UnsetValue)
             b.ClearValue(FrameworkElement.StyleProperty);
+
+        if (style == "plain")
+        {
+            var clear = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            foreach (var key in new[] { "ButtonBackground", "ButtonBorderBrush", "ButtonBorderBrushPointerOver", "ButtonBorderBrushPressed" })
+                b.Resources[key] = clear;
+            b.Resources["ButtonBackgroundPointerOver"] = Theme.Brush("subtleFill");
+            b.Resources["ButtonBackgroundPressed"] = Theme.Brush("subtleFillPressed");
+        }
+        else if (style == "destructive")
+        {
+            var red = Theme.Brush("danger", forText: true);
+            foreach (var key in new[] { "ButtonForeground", "ButtonForegroundPointerOver", "ButtonForegroundPressed" })
+                b.Resources[key] = red;
+        }
     }
 
     static void ApplyImage(Image img, JsonObject p)
@@ -476,6 +501,7 @@ public sealed partial class Reconciler
                 nb.Value = v; break;
             case ListView lv when J.Num(p, "selected") is { } i && lv.SelectedIndex != (int)i:
                 lv.SelectedIndex = (int)i; break;
+            default: ApplySharedValue(el, t, p); break;
         }
     }
 }

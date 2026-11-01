@@ -109,6 +109,12 @@ final class HostApp: NSObject, NSApplicationDelegate {
         if !hw.shown {
             hw.shown = true
             hw.window.makeKeyAndOrderFront(nil)
+            // Unless the app turns autoFocus off, the system puts focus on the first control. Off clears it.
+            if (config["autoFocus"] as? Bool) == false {
+                for delay in [0.0, 0.15] {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak w = hw.window] in w?.makeFirstResponder(nil) }
+                }
+            }
         }
     }
 

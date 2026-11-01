@@ -46,4 +46,28 @@ enum Theme {
         let b = Double(v & 255) / 255
         return Color(.sRGB, red: r, green: g, blue: b, opacity: a)
     }
+
+    /// `"#RRGGBB"`, or `"#AARRGGBB"` when the color is translucent, matching the Windows host.
+    static func hexString(_ color: Color) -> String {
+        guard let c = NSColor(color).usingColorSpace(.sRGB) else { return "#000000" }
+        func byte(_ v: CGFloat) -> Int { Int((v * 255).rounded()) }
+        let rgb = String(format: "%02X%02X%02X", byte(c.redComponent), byte(c.greenComponent), byte(c.blueComponent))
+        return c.alphaComponent < 0.999 ? String(format: "#%02X", byte(c.alphaComponent)) + rgb : "#" + rgb
+    }
+
+    /// A color string, or a `LinearGradient` object from JS, as something a view can be filled with.
+    static func shapeStyle(_ spec: Any?) -> AnyShapeStyle? {
+        if let s = spec as? String { return color(s).map { AnyShapeStyle($0) } }
+        guard let g = (spec as? JSONDict)?["gradient"] as? JSONDict, let raw = g["stops"] as? [JSONDict] else { return nil }
+        let stops = raw.compactMap { d -> Gradient.Stop? in
+            guard let c = color(d["color"] as? String) else { return nil }
+            return Gradient.Stop(color: c, location: CGFloat(doubleValue(d["at"]) ?? 0))
+        }
+        func point(_ any: Any?) -> UnitPoint {
+            let a: [Double] = (any as? [Any])?.map { doubleValue($0) ?? 0 } ?? [0.5, 0]
+            return UnitPoint(x: a.count > 0 ? a[0] : 0.5, y: a.count > 1 ? a[1] : 0)
+        }
+        guard stops.count >= 2 else { return nil }
+        return AnyShapeStyle(LinearGradient(stops: stops, startPoint: point(g["start"]), endPoint: point(g["end"])))
+    }
 }

@@ -10,7 +10,7 @@ export type FontPreset =
   | 'body' | 'callout' | 'caption' | 'caption2' | 'mono';
 export type FontWeight = 'thin' | 'extraLight' | 'light' | 'normal' | 'medium' | 'semibold' | 'bold' | 'extraBold' | 'black' | number;
 export type Align = 'start' | 'center' | 'end' | 'stretch' | 'leading' | 'trailing' | 'top' | 'bottom';
-export type Edges = number | [number, number] | { horizontal?: number; vertical?: number; top?: number; bottom?: number; leading?: number; trailing?: number; left?: number; right?: number };
+export type Edges = number | [number, number] | { horizontal?: number; vertical?: number; x?: number; y?: number; top?: number; bottom?: number; leading?: number; trailing?: number; left?: number; right?: number };
 
 /** Two-way bindable value. Pass it to TextField, Toggle, Slider, ... */
 export interface Bindable<T> { value: T }
@@ -25,6 +25,10 @@ export class State<T> implements Bindable<T> {
 }
 export function state<T>(initial: T): State<T>;
 export function Binding<T>(get: () => T, set: (v: T) => void): Bindable<T>;
+
+/** A color ramp for `background()` and `foreground()`. Make one with `LinearGradient`. */
+export interface Gradient { readonly gradient: { stops: Array<{ color: Color; at: number }>; start: [number, number]; end: [number, number] } }
+export type GradientPoint = 'top' | 'bottom' | 'leading' | 'trailing' | 'center' | 'topLeading' | 'topTrailing' | 'bottomLeading' | 'bottomTrailing' | [number, number];
 
 export type Child = View | string | number | null | undefined | false | Child[];
 
@@ -57,8 +61,8 @@ export class View {
   lineLimit(n: number): View;
   selectable(on?: boolean): View;
   // appearance
-  foreground(c: Color): View;
-  background(c: Color): View;
+  foreground(c: Color | Gradient): View;
+  background(c: Color | Gradient): View;
   border(color?: Color, width?: number): View;
   cornerRadius(r: number): View;
   opacity(o: number): View;
@@ -67,11 +71,43 @@ export class View {
   disabled(on?: boolean): View;
   hidden(on?: boolean): View;
   tooltip(text: string): View;
+  /** Outline a shape (`Rectangle`, `Circle`, ...). */
+  stroke(color?: Color, width?: number): View;
+  /** Shift the view without changing the layout around it. */
+  offset(x?: number, y?: number): View;
+  /** Rotate around the center, in degrees. */
+  rotation(degrees: number): View;
+  /** Scale around the center. One number scales both axes. */
+  scale(x: number, y?: number): View;
+  /** Stacking order among siblings in a ZStack. Higher is in front. */
+  zIndex(n: number): View;
+  /** With false the view and its children ignore the pointer. */
+  hitTesting(on?: boolean): View;
+  accessibilityLabel(s: string): View;
+  accessibilityHint(s: string): View;
+  underline(on?: boolean): View;
+  strikethrough(on?: boolean): View;
+  /** Extra space between characters, in points. */
+  tracking(n: number): View;
+  /** A keyboard shortcut for a Button, such as `'CmdOrCtrl+S'`, or for a MenuItem. */
+  shortcut(spec: string): View;
+  /** A check mark on a MenuItem. */
+  checked(on?: boolean): View;
   // behavior
   id(key: string | number): View;
   onTap(fn: () => void): View;
   onChange(fn: (value: any) => void): View;
   onSubmit(fn: (value: string) => void): View;
+  onDoubleTap(fn: () => void): View;
+  /** Called with true when the pointer enters the view and false when it leaves. */
+  onHover(fn: (inside: boolean) => void): View;
+  /** A right-click menu: `contextMenu(MenuItem(...), Divider(), Menu('More', ...))`. */
+  contextMenu(...items: Child[]): View;
+  /** A small floating panel next to the view, open while `isOpen` is true. Closing it from the outside sets a bound state back to false. */
+  popover(isOpen: Bindable<boolean> | boolean, opts: { edge?: 'top' | 'bottom' | 'leading' | 'trailing' }, ...content: Child[]): View;
+  popover(isOpen: Bindable<boolean> | boolean, ...content: Child[]): View;
+  /** A modal panel over the window, open while `isOpen` is true. Put a button inside that sets it back to false. */
+  sheet(isOpen: Bindable<boolean> | boolean, ...content: Child[]): View;
   /** Subscribe to a WinUI event by name; most useful on Native views. */
   on(eventName: string, fn: (value?: any) => void): View;
   prop(name: string, value: unknown): View;
@@ -82,8 +118,11 @@ export class View {
   label(s: string): View;
   /** A universal icon name ('search', 'photos'), a { windows, macos } pair, or a direct Windows Symbol / SF Symbol name. */
   icon(name: IconSpec): View;
-  /** 'accent' for buttons, 'ring' for progress, 'plain' for a borderless TextField. */
-  style(s: 'accent' | 'ring' | 'plain' | (string & {})): View;
+  /**
+   * Buttons: 'accent' (filled), 'plain' (no fill or border), 'destructive' (red).
+   * Pickers: 'segmented' or 'radio'. Progress: 'ring'. TextField: 'plain' (borderless).
+   */
+  style(s: 'accent' | 'plain' | 'destructive' | 'segmented' | 'radio' | 'ring' | (string & {})): View;
   axis(a: 'vertical' | 'horizontal' | 'both'): View;
   fit(f: 'fit' | 'fill' | 'cover' | 'none'): View;
   readOnly(on?: boolean): View;
@@ -128,6 +167,44 @@ export function Image(source: string, opts?: { fit?: 'fit' | 'fill' | 'cover' | 
 export function List<T>(items: T[], render: (item: T, index: number) => Child, opts?: { key?: (item: T, i: number) => string | number }): View;
 export function List(...children: Child[]): View;
 export function ForEach<T>(items: T[], render: (item: T, index: number) => View | string, opts?: { key?: (item: T, i: number) => string | number }): View[];
+/** An icon next to text. */
+export function Label(text: string, icon?: IconSpec): View;
+/** A hyperlink that opens in the default browser. */
+export function Link(text: string, url: string): View;
+/** Picks a date, or a time of day with `mode: 'time'`. The bound value is a Date; picking a date keeps the time of day it had. */
+export function DatePicker(label: string, value: Bindable<Date> | Date | number | string, opts?: { mode?: 'date' | 'time'; min?: Date | number; max?: Date | number }): View;
+/** Picks a color. The bound value is '#RRGGBB', or '#AARRGGBB' once a translucent color is picked (with `alpha: true`). */
+export function ColorPicker(label: string, value: Bindable<string> | string, opts?: { alpha?: boolean }): View;
+/** A text field with a magnifier. `onSubmit` runs on Return. */
+export function SearchField(placeholder: string, value: Bindable<string> | string): View;
+export function SearchField(value: Bindable<string> | string): View;
+/** A collapsible section. Pass `{ expanded: state }` first to control it from your code. */
+export function DisclosureGroup(label: string, props: { expanded?: Bindable<boolean> | boolean; [k: string]: unknown }, ...children: Child[]): View;
+export function DisclosureGroup(label: string, ...children: Child[]): View;
+/** One page of a TabView. Chain `.icon()`. */
+export function Tab(label: string, ...content: Child[]): View;
+/** Tabs. The selected index is optional: `TabView(index, Tab(...), Tab(...))`. */
+export function TabView(selected: Bindable<number> | number, ...tabs: Child[]): View;
+export function TabView(...tabs: Child[]): View;
+/** A sidebar beside a detail pane. */
+export function SplitView(sidebar: View, detail: View, opts?: { sidebarWidth?: number }): View;
+/** A button that opens a menu. Entries are `MenuItem`, `Divider` and nested `Menu` views. */
+export function Menu(label: string, ...items: Child[]): View;
+/** An entry in a Menu or contextMenu. Chain `.icon()`, `.checked()`, `.shortcut()` and `.disabled()`. */
+export function MenuItem(label: string, action?: () => void | Promise<void>): View;
+/** Rows of cells that share columns. */
+export function Grid(props: { hSpacing?: number; vSpacing?: number }, ...rows: Child[]): View;
+export function Grid(...rows: Child[]): View;
+export function GridRow(...cells: Child[]): View;
+/** Shapes fill with `foreground()` and outline with `stroke()`. */
+export function Rectangle(): View;
+export function RoundedRectangle(radius?: number): View;
+/** Draws an ellipse. Give it a square frame for a circle. */
+export function Circle(): View;
+export function Ellipse(): View;
+export function Capsule(): View;
+/** A color ramp for `background()` and `foreground()`. Stops are colors, or `{ color, at }` with `at` from 0 to 1. */
+export function LinearGradient(stops: Array<Color | { color: Color; at: number }>, from?: GradientPoint, to?: GradientPoint): Gradient;
 /** Any WinUI control by type name, e.g. Native('Expander', { Header: 'More' }, child). Windows only: it renders nothing on macOS. */
 export function Native(type: string, props?: Record<string, unknown>, ...children: Child[]): View;
 
@@ -143,6 +220,11 @@ export interface WindowOptions {
   cornerRadius?: number;
   /** Path to a square PNG (512px or larger is best) or an .ico/.icns file, relative to your script. It is the title bar and taskbar icon on Windows and the Dock icon on macOS. */
   icon?: string;
+  /**
+   * Whether a new window puts keyboard focus on its first control. Default true. Set false for a
+   * window that should open with nothing focused, and so no focus ring.
+   */
+  autoFocus?: boolean;
   /** The window's menu bar: the macOS menu bar, or a bar at the top of the window on Windows. Pass a function to read `state` (checkmarks, disabled items); it runs again on every render. */
   menu?: MenuSpec | (() => MenuSpec);
 }

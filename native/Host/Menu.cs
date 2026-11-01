@@ -155,7 +155,7 @@ static class AppMenu
     }
 
     /// <summary>"CmdOrCtrl+Shift+N" and friends. Cmd means Ctrl on Windows.</summary>
-    static KeyboardAccelerator? Accelerator(string spec)
+    internal static KeyboardAccelerator? Accelerator(string spec)
     {
         var mods = VirtualKeyModifiers.None;
         string? key = null;

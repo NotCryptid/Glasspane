@@ -88,8 +88,14 @@ func textFont(_ n: VNode) -> Font? {
 struct Common: ViewModifier {
     let n: VNode
 
+    /// Where the content sits in a frame that stretches. WinUI lays a stretched stack's children out
+    /// from its alignment and from the top, so a stretched VStack does not center what it holds.
     private var alignment: Alignment {
-        return Alignment(horizontal: hAlignment(n.str("hAlign")), vertical: vAlignment(n.str("vAlign")))
+        var h = hAlignment(n.str("hAlign"))
+        var v = vAlignment(n.str("vAlign"))
+        if n.str("hAlign") == "stretch" && n.type == "VStack" { h = hAlignment(n.str("alignment")) }
+        if n.str("vAlign") == "stretch" { v = .top }
+        return Alignment(horizontal: h, vertical: v)
     }
 
     func body(content: Content) -> some View {
@@ -103,14 +109,17 @@ struct Common: ViewModifier {
         return content
             .ifLet(textFont(n)) { $0.font($1) }
             .ifLet(Theme.color(n.str("foreground"))) { $0.foregroundColor($1) }
+            .ifLet(n.props["foreground"] is JSONDict ? Theme.shapeStyle(n.props["foreground"]) : nil) { $0.foregroundStyle($1) }
             .ifLet(n.insets("padding")) { $0.padding($1) }
-            .frame(width: n.cg("width"), height: n.cg("height"))
+            // A Button sizes its label instead, so the system draws every style around the same box.
+            .frame(width: n.type == "Button" ? nil : n.cg("width"), height: n.type == "Button" ? nil : n.cg("height"))
             .ifLet(flexible ? true : nil) { v, _ in
                 v.frame(minWidth: n.cg("minWidth"), maxWidth: maxW,
                         minHeight: n.cg("minHeight"), maxHeight: maxH, alignment: alignment)
             }
             .ifLet(n.cg("glass")) { $0.glassEffect(.regular, in: RoundedRectangle(cornerRadius: $1)) }
             .ifLet(Theme.color(n.str("background"))) { $0.background($1) }
+            .ifLet(n.props["background"] is JSONDict ? Theme.shapeStyle(n.props["background"]) : nil) { $0.background($1) }
             .ifLet(n.cg("cornerRadius")) { $0.clipShape(RoundedRectangle(cornerRadius: $1)) }
             .ifLet(border) { v, b in
                 v.overlay(
@@ -119,15 +128,145 @@ struct Common: ViewModifier {
                                 lineWidth: CGFloat(doubleValue(b["width"]) ?? 1))
                 )
             }
-            .ifLet(n.insets("margin")) { $0.padding($1) }
             .ifLet(n.num("opacity")) { $0.opacity($1) }
             .disabled(n.bool("disabled") == true)
             .ifLet(n.str("tooltip")) { $0.help($1) }
     }
 }
 
+/// Modifiers with a counterpart on both platforms that sit outside the box `Common` draws:
+/// transforms, margin (which a transform must not include), stacking, hit testing, accessibility
+/// and text decoration.
+struct Extras: ViewModifier {
+    let n: VNode
+
+    func body(content: Content) -> some View {
+        content
+            .ifLet(n.has("scaleX") || n.has("scaleY") ? CGSize(width: n.cg("scaleX") ?? 1, height: n.cg("scaleY") ?? 1) : nil) { $0.scaleEffect($1) }
+            .ifLet(n.num("rotation")) { $0.rotationEffect(.degrees($1)) }
+            .ifLet(n.has("offsetX") || n.has("offsetY") ? CGSize(width: n.cg("offsetX") ?? 0, height: n.cg("offsetY") ?? 0) : nil) { $0.offset(x: $1.width, y: $1.height) }
+            .ifLet(n.insets("margin")) { $0.padding($1) }
+            .ifLet(n.num("zIndex")) { $0.zIndex($1) }
+            .allowsHitTesting(n.bool("hitTesting") != false)
+            .ifLet(n.str("a11yLabel")) { $0.accessibilityLabel($1) }
+            .ifLet(n.str("a11yHint")) { $0.accessibilityHint($1) }
+            .ifLet(n.bool("underline")) { $0.underline($1) }
+            .ifLet(n.bool("strikethrough")) { $0.strikethrough($1) }
+            .ifLet(n.cg("tracking")) { $0.tracking($1) }
+    }
+}
+
 extension View {
-    func gp(_ n: VNode) -> some View { modifier(Common(n: n)) }
+    func gp(_ n: VNode) -> some View { modifier(Common(n: n)).modifier(Extras(n: n)) }
+}
+
+/// "CmdOrCtrl+Shift+N" as SwiftUI wants it. Cmd and Ctrl both mean Command here, as in the menu bar.
+func keyShortcut(_ spec: String?) -> (KeyEquivalent, EventModifiers)? {
+    guard let spec = spec else { return nil }
+    var mods: EventModifiers = []
+    var key = ""
+    for part in spec.split(separator: "+", omittingEmptySubsequences: true).map(String.init) {
+        switch part.lowercased() {
+        case "cmd", "command", "meta", "cmdorctrl", "commandorcontrol": mods.insert(.command)
+        case "ctrl", "control": mods.insert(.control)
+        case "alt", "option": mods.insert(.option)
+        case "shift": mods.insert(.shift)
+        default: key = part
+        }
+    }
+    let special: [String: KeyEquivalent] = [
+        "enter": .return, "return": .return, "esc": .escape, "escape": .escape, "space": .space, "tab": .tab,
+        "delete": .deleteForward, "backspace": .delete, "up": .upArrow, "down": .downArrow, "left": .leftArrow, "right": .rightArrow,
+    ]
+    if let k = special[key.lowercased()] { return (k, mods) }
+    guard key.count == 1, let c = key.lowercased().first else { return nil }
+    return (KeyEquivalent(c), mods)
+}
+
+// MARK: - Menus, popovers and sheets
+
+/// The entries of a `Menu` or `contextMenu`: MenuItem, Divider and nested Menu nodes.
+struct MenuEntries: View {
+    let items: [VNode]
+    @EnvironmentObject var model: WindowModel
+
+    var body: some View {
+        ForEach(Array(items.enumerated()), id: \.offset) { _, it in entry(it) }
+    }
+
+    @ViewBuilder private func entry(_ it: VNode) -> some View {
+        switch it.type {
+        case "Divider": Divider()
+        case "Menu": Menu { MenuEntries(items: it.children) } label: { titled(it) }
+        case "MenuItem": item(it)
+        default: EmptyView()
+        }
+    }
+
+    @ViewBuilder private func titled(_ it: VNode) -> some View {
+        let label = it.str("text") ?? ""
+        if let icon = it.str("icon") { Label(label, systemImage: symbol(icon)) } else { Text(verbatim: label) }
+    }
+
+    @ViewBuilder private func item(_ it: VNode) -> some View {
+        let action = { if let id = it.events["click"] { model.emit(id) } }
+        if it.has("checked") {
+            Toggle(isOn: Binding(get: { it.bool("checked") == true }, set: { _ in action() })) { titled(it) }
+                .disabled(it.bool("disabled") == true)
+        } else {
+            Button(action: action) { titled(it) }
+                .ifLet(keyShortcut(it.str("shortcut"))) { $0.keyboardShortcut($1.0, modifiers: $1.1) }
+                .disabled(it.bool("disabled") == true)
+        }
+    }
+}
+
+private func edge(_ s: String?) -> Edge {
+    switch s {
+    case "top": return .top
+    case "leading", "left": return .leading
+    case "trailing", "right": return .trailing
+    default: return .bottom
+    }
+}
+
+/// Hover, double tap, context menu, popover and sheet.
+struct Attachments: ViewModifier {
+    let node: VNode
+    @EnvironmentObject var model: WindowModel
+
+    /// Open while the node says so. A dismissal is remembered until Node acknowledges it, so the
+    /// panel does not reopen from a render that was already in flight.
+    private func open(_ prop: String, _ event: String) -> Binding<Bool> {
+        Binding<Bool>(
+            get: {
+                if model.hold, let h = node.events[event], let v = model.overrides[h] as? Bool { return v }
+                return node.bool(prop) == true
+            },
+            set: { value in
+                guard let h = node.events[event] else { return }
+                model.overrides[h] = value
+                model.emit(h, value)
+            }
+        )
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .ifLet(node.events["doubleTap"]) { v, id in v.contentShape(Rectangle()).onTapGesture(count: 2) { model.emit(id) } }
+            .ifLet(node.events["hover"]) { v, id in v.onHover { model.emit(id, $0) } }
+            .ifLet(node.overlays["contextMenu"]) { v, items in v.contextMenu { MenuEntries(items: items) } }
+            .ifLet(node.overlays["popover"]?.first) { v, panel in
+                v.popover(isPresented: open("popoverOpen", "popoverDismiss"), arrowEdge: edge(node.str("popoverEdge"))) {
+                    NodeView(node: panel).environmentObject(model)
+                }
+            }
+            .ifLet(node.overlays["sheet"]?.first) { v, panel in
+                v.sheet(isPresented: open("sheetOpen", "sheetDismiss")) {
+                    NodeView(node: panel).environmentObject(model)
+                }
+            }
+    }
 }
 
 // MARK: - Backdrop
@@ -197,6 +336,8 @@ struct NodeView: View {
     let node: VNode
     var fill: Fill = .none
     @EnvironmentObject var model: WindowModel
+    /// A DisclosureGroup nobody controls remembers its own state.
+    @State private var disclosed = false
 
     /// Views with built-in styling get their defaults here, so `Common` treats them like any other.
     private var eff: VNode {
@@ -213,7 +354,7 @@ struct NodeView: View {
         } else if node.type == "Spacer" {
             Spacer(minLength: node.cg("minHeight") ?? node.cg("minWidth"))
         } else {
-            filled(tappable(content.gp(eff)))
+            filled(tappable(content.gp(eff)).modifier(Attachments(node: node)))
         }
     }
 
@@ -317,6 +458,21 @@ struct NodeView: View {
         case "Icon": Image(systemName: symbol(node.str("name") ?? ""))
         case "Divider": Divider()
         case "Native": native
+        case "Label": label
+        case "Link": link
+        case "DatePicker": datePicker
+        case "ColorPicker": colorPicker
+        case "SearchField": searchField
+        case "DisclosureGroup": disclosure
+        case "TabView": tabs
+        case "SplitView": split
+        case "Menu": menu
+        case "Grid": grid
+        case "Rectangle": shape(Rectangle())
+        case "RoundedRectangle": shape(RoundedRectangle(cornerRadius: node.cg("radius") ?? 8))
+        case "Circle": shape(Circle())
+        case "Ellipse": shape(Ellipse())
+        case "Capsule": shape(Capsule())
         default: EmptyView()
         }
     }
@@ -384,12 +540,31 @@ struct NodeView: View {
         let action = { if let id = node.events["click"] { model.emit(id) } }
         let label = node.str("text") ?? ""
         let icon = node.str("icon").map(symbol)
-        let b = Button(action: action) {
-            if let icon = icon, !label.isEmpty { Label(label, systemImage: icon) }
-            else if let icon = icon { Image(systemName: icon) }
-            else { Text(verbatim: label) }
+        let style = node.str("style")
+        // `width` and `height` size the whole button, as on Windows, so take off the padding the
+        // bordered styles add around their label.
+        let inset = style == "plain" ? CGSize.zero : CGSize(width: 24, height: 8)
+        let b = Button(role: style == "destructive" ? .destructive : nil, action: action) {
+            Group {
+                if let icon = icon, !label.isEmpty { Label(label, systemImage: icon) }
+                // An icon-only button is at least a line of text tall, whatever its glyph's own height is.
+                else if let icon = icon {
+                    Label(node.str("tooltip") ?? icon, systemImage: icon).labelStyle(.iconOnly)
+                        .frame(minWidth: 18, minHeight: 16)
+                }
+                else { Text(verbatim: label) }
+            }
+            .frame(width: node.cg("width").map { max($0 - inset.width, 0) }, height: node.cg("height").map { max($0 - inset.height, 0) })
+            .contentShape(Rectangle())
         }
-        if node.str("style") == "accent" { b.buttonStyle(.borderedProminent) } else { b.buttonStyle(.bordered) }
+        .ifLet(keyShortcut(node.str("shortcut"))) { $0.keyboardShortcut($1.0, modifiers: $1.1) }
+        .ifLet(label.isEmpty ? (node.str("tooltip") ?? node.str("icon")) : nil) { $0.accessibilityLabel($1) }
+        .ifLet(style == "destructive" ? Theme.color("danger") : nil) { $0.foregroundColor($1) }
+        switch style {
+        case "accent": b.buttonStyle(.borderedProminent)
+        case "plain": b.buttonStyle(.borderless)
+        default: b.buttonStyle(.bordered)
+        }
     }
 
     @ViewBuilder private func textInput(secure: Bool) -> some View {
@@ -449,15 +624,20 @@ struct NodeView: View {
     @ViewBuilder private var picker: some View {
         let options = node.props["options"] as? [String] ?? []
         let selection = binding("selected", -1, integer)
-        labeled {
-            Picker("", selection: selection) {
-                if selection.wrappedValue < 0 || selection.wrappedValue >= options.count {
-                    Text(verbatim: node.str("placeholder") ?? "").tag(selection.wrappedValue)
-                }
-                ForEach(Array(options.enumerated()), id: \.offset) { i, o in Text(verbatim: o).tag(i) }
+        let style = node.str("style")
+        let picker = Picker("", selection: selection) {
+            if style != "segmented" && style != "radio" && (selection.wrappedValue < 0 || selection.wrappedValue >= options.count) {
+                Text(verbatim: node.str("placeholder") ?? "").tag(selection.wrappedValue)
             }
-            .labelsHidden()
-            .pickerStyle(.menu)
+            ForEach(Array(options.enumerated()), id: \.offset) { i, o in Text(verbatim: o).tag(i) }
+        }
+        .labelsHidden()
+        labeled {
+            switch style {
+            case "segmented": picker.pickerStyle(.segmented)
+            case "radio": picker.pickerStyle(.radioGroup)
+            default: picker.pickerStyle(.menu)
+            }
         }
     }
 
@@ -502,6 +682,141 @@ struct NodeView: View {
         guard let img = NSImage(contentsOf: url) else { return nil }
         imageCache[url] = img
         return img
+    }
+
+    // ---- views with a WinUI counterpart
+
+    @ViewBuilder private var label: some View {
+        let text = node.str("text") ?? ""
+        if let icon = node.str("icon") { Label(text, systemImage: symbol(icon)) } else { Text(verbatim: text) }
+    }
+
+    @ViewBuilder private var link: some View {
+        if let s = node.str("url"), let url = URL(string: s) { Link(node.str("text") ?? s, destination: url) }
+        else { Text(verbatim: node.str("text") ?? "") }
+    }
+
+    @ViewBuilder private var datePicker: some View {
+        let ms = binding("value", Date().timeIntervalSince1970 * 1000, number)
+        let date = Binding<Date>(
+            get: { Date(timeIntervalSince1970: ms.wrappedValue / 1000) },
+            set: { ms.wrappedValue = ($0.timeIntervalSince1970 * 1000).rounded() }
+        )
+        let lo = node.num("min").map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date.distantPast
+        let hi = node.num("max").map { Date(timeIntervalSince1970: $0 / 1000) } ?? Date.distantFuture
+        DatePicker(node.str("label") ?? "", selection: date, in: lo...hi,
+                   displayedComponents: node.str("mode") == "time" ? .hourAndMinute : .date)
+    }
+
+    @ViewBuilder private var colorPicker: some View {
+        let hex = binding("value", "#000000", string)
+        let color = Binding<Color>(
+            get: { Theme.color(hex.wrappedValue) ?? .black },
+            set: { hex.wrappedValue = Theme.hexString($0) }
+        )
+        ColorPicker(node.str("label") ?? "", selection: color, supportsOpacity: node.bool("alpha") == true)
+    }
+
+    @ViewBuilder private var searchField: some View {
+        let b = binding("text", "", string)
+        let submit = { if let id = node.events["submit"] { model.emit(id, b.wrappedValue) } }
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass").foregroundColor(.secondary)
+            TextField(node.str("placeholder") ?? "Search", text: b).textFieldStyle(.plain).onSubmit(submit)
+            if !b.wrappedValue.isEmpty {
+                Button { b.wrappedValue = "" } label: { Image(systemName: "xmark.circle.fill").foregroundColor(.secondary) }
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(nsColor: .separatorColor)))
+    }
+
+    @ViewBuilder private var disclosure: some View {
+        let expanded: Binding<Bool> = node.has("expanded") ? binding("expanded", false, flag) : $disclosed
+        DisclosureGroup(node.str("label") ?? "", isExpanded: expanded) {
+            if let c = node.children.first { NodeView(node: c, fill: .width) }
+        }
+    }
+
+    @ViewBuilder private var tabs: some View {
+        let selection = binding("selected", 0, integer)
+        TabView(selection: selection) {
+            ForEach(Array(node.children.enumerated()), id: \.offset) { i, tab in
+                Group {
+                    if let c = tab.children.first { NodeView(node: c, fill: .both) }
+                }
+                .tabItem {
+                    if let icon = tab.str("icon") { Label(tab.str("text") ?? "", systemImage: symbol(icon)) }
+                    else { Text(verbatim: tab.str("text") ?? "") }
+                }
+                .tag(i)
+            }
+        }
+    }
+
+    @ViewBuilder private var split: some View {
+        if node.children.count >= 2 {
+            NavigationSplitView {
+                NodeView(node: node.children[0], fill: .both)
+                    .navigationSplitViewColumnWidth(node.cg("sidebarWidth") ?? 240)
+            } detail: {
+                NodeView(node: node.children[1], fill: .both)
+            }
+        }
+    }
+
+    @ViewBuilder private var menu: some View {
+        let text = node.str("text") ?? ""
+        Menu {
+            MenuEntries(items: node.children)
+        } label: {
+            if let icon = node.str("icon"), !text.isEmpty { Label(text, systemImage: symbol(icon)) }
+            else if let icon = node.str("icon") { Image(systemName: symbol(icon)) }
+            else { Text(verbatim: text) }
+        }
+        .menuStyle(.button)
+    }
+
+    @ViewBuilder private var grid: some View {
+        let counts = (node.props["rows"] as? [Any])?.compactMap { intValue($0) } ?? []
+        let rows: [[VNode]] = {
+            var out: [[VNode]] = []
+            var at = 0
+            for n in counts {
+                out.append(Array(node.children[min(at, node.children.count)..<min(at + n, node.children.count)]))
+                at += n
+            }
+            return out
+        }()
+        Grid(horizontalSpacing: node.cg("hSpacing") ?? 8, verticalSpacing: node.cg("vSpacing") ?? 8) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, cells in
+                GridRow {
+                    ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in gridCell(cell) }
+                }
+            }
+        }
+    }
+
+    /// A cell that asks for `hAlign` or `vAlign` is placed in its column, not stretched to fill the
+    /// whole grid, which is how an Auto column behaves on Windows.
+    @ViewBuilder private func gridCell(_ cell: VNode) -> some View {
+        let h = cell.str("hAlign"), v = cell.str("vAlign")
+        let anchorX: CGFloat? = h == "leading" || h == "start" ? 0 : h == "trailing" || h == "end" ? 1 : nil
+        let anchorY: CGFloat? = v == "top" || v == "start" ? 0 : v == "bottom" || v == "end" ? 1 : nil
+        NodeView(node: cell.without(anchorX != nil ? "hAlign" : nil, anchorY != nil ? "vAlign" : nil))
+            .gridCellAnchor(UnitPoint(x: anchorX ?? 0.5, y: anchorY ?? 0.5))
+    }
+
+    @ViewBuilder private func shape<S: Shape>(_ s: S) -> some View {
+        let outline = node.props["stroke"] as? JSONDict
+        s.fill(Theme.shapeStyle(node.props["foreground"]) ?? AnyShapeStyle(Color.primary))
+            .ifLet(outline) { v, o in
+                v.overlay(s.stroke(Theme.color(o["color"] as? String ?? "primary") ?? Color.primary,
+                                   lineWidth: CGFloat(doubleValue(o["width"]) ?? 1)))
+            }
     }
 
     /// `Native` names a WinUI control, which has no equivalent here. Its children still render.

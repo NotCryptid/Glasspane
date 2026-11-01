@@ -173,14 +173,53 @@ For a one-way value, pass a plain value and add `.onChange(fn)`. `Binding(get, s
 
 | Group | Views |
 |---|---|
-| Layout | `VStack` `HStack` `ZStack` `ScrollView` `Card` `List` `Spacer` `Divider` |
-| Content | `Text` `Icon` `Image` `ProgressView` `Spinner` |
-| Input | `Button` `TextField` `SecureField` `TextEditor` `Toggle` `Checkbox` `Slider` `Stepper` `Picker` |
+| Layout | `VStack` `HStack` `ZStack` `ScrollView` `Card` `List` `Grid` `GridRow` `SplitView` `TabView` `Tab` `DisclosureGroup` `Spacer` `Divider` |
+| Content | `Text` `Label` `Link` `Icon` `Image` `ProgressView` `Spinner` `Rectangle` `RoundedRectangle` `Circle` `Ellipse` `Capsule` |
+| Input | `Button` `Menu` `MenuItem` `TextField` `SecureField` `SearchField` `TextEditor` `Toggle` `Checkbox` `Slider` `Stepper` `Picker` `DatePicker` `ColorPicker` |
 | Helpers | `ForEach(items, render)` for keyed lists, `Native(type, props, ...children)` |
 
 Stacks accept a props object first, as in `VStack({ spacing: 12, alignment: 'leading' }, ...)`. The same options exist as modifiers. `Spacer()` and `.flex()` split whatever space is left in a stack.
 
 `Icon(spec)` and `Button(...).icon(spec)` accept a universal icon name (`'search'`, `'photos'`, `'heart'`, `'settings'`), an explicit `{ windows, macos }` pair, or a direct Windows `Symbol` / macOS SF Symbol name. Native symbol names map both ways automatically — e.g. `Icon('eye')` resolves to `'View'` on Windows, and `Icon('View')` resolves to `'eye'` on macOS. See [ICONS.md](ICONS.md) for the full mapping table.
+
+### Views that exist in both SwiftUI and WinUI
+
+Each of these maps to a real control on both platforms:
+
+| Glasspane | SwiftUI | WinUI |
+|---|---|---|
+| `TabView(index, Tab('One', ...), ...)` | `TabView` | `TabView` |
+| `SplitView(sidebar, detail, { sidebarWidth })` | `NavigationSplitView` | `SplitView` |
+| `DisclosureGroup(label, ...)` | `DisclosureGroup` | `Expander` |
+| `Menu(label, MenuItem(...), Divider(), Menu(...))` | `Menu` | `DropDownButton` + `MenuFlyout` |
+| `Grid(GridRow(a, b), GridRow(c, d))` | `Grid` | `Grid` with Auto rows and columns |
+| `DatePicker(label, state, { mode })` | `DatePicker` | `CalendarDatePicker`, `TimePicker` |
+| `ColorPicker(label, state)` | `ColorPicker` | `ColorPicker` |
+| `SearchField(placeholder, state)` | a field with a magnifier | `AutoSuggestBox` |
+| `Label(text, icon)`, `Link(text, url)` | `Label`, `Link` | icon and text, `HyperlinkButton` |
+| `Picker(...).style('segmented' \| 'radio')` | `.segmented`, `.radioGroup` | `SelectorBar`, `RadioButtons` |
+| `Button(...).style('plain' \| 'destructive')` | `.borderless`, destructive role | subtle button, critical text |
+| `Rectangle` `RoundedRectangle` `Circle` `Ellipse` `Capsule` | the shapes | `Rectangle`, `Ellipse` |
+| `.popover(open, ...)`, `.sheet(open, ...)` | `.popover`, `.sheet` | `Flyout`, `ContentDialog` |
+| `.contextMenu(...)` | `.contextMenu` | `ContextFlyout` |
+
+```js
+const open = state(false);
+
+Button('Options', () => { open.value = true; })
+  .popover(open, { edge: 'bottom' }, Toggle('Enabled', enabled).padding(12))
+  .contextMenu(MenuItem('Copy', copy).icon('copy').shortcut('CmdOrCtrl+C'), Divider(), MenuItem('Delete', del));
+
+RoundedRectangle(12).foreground(LinearGradient(['#ff5f6d', '#ffc371'], 'topLeading', 'bottomTrailing'))
+```
+
+Notes:
+
+- A popover or sheet is open while its state is true. Dismissing it from the outside sets a bound state back to false. A sheet has no close button of its own, so put one inside.
+- `DatePicker` binds a `Date`. Picking a date keeps the time of day the value had.
+- `Circle` is an ellipse on Windows, so give it a square frame. `ColorPicker` has no label on Windows.
+- A gradient's theme-keyword stops (such as `'accent'`) are resolved when the view renders on Windows, so they do not follow a later theme change. Hex colors are fine.
+- Segmented pickers have no label on Windows, and `SplitView` on macOS adds the system sidebar toggle.
 
 ## Modifiers
 
@@ -189,11 +228,16 @@ Modifiers chain and each returns a new view.
 | Kind | Modifiers |
 |---|---|
 | Layout | `padding` `margin` `frame` `width` `height` `fill` `flex` `hAlign` `vAlign` |
-| Text | `font` `bold` `italic` `textAlign` `lineLimit` `selectable` |
-| Appearance | `foreground` `background` `border` `cornerRadius` `glass` `opacity` `disabled` `hidden` `tooltip` |
-| Behavior | `onTap` `onChange` `onSubmit` `on(event, fn)` `id(key)` |
+| Text | `font` `bold` `italic` `underline` `strikethrough` `tracking` `textAlign` `lineLimit` `selectable` |
+| Appearance | `foreground` `background` `border` `stroke` `cornerRadius` `glass` `opacity` `disabled` `hidden` `tooltip` |
+| Transform | `offset` `rotation` `scale` `zIndex` |
+| Behavior | `onTap` `onDoubleTap` `onHover` `onChange` `onSubmit` `on(event, fn)` `id(key)` `shortcut` `hitTesting` |
+| Presentation | `contextMenu` `popover` `sheet` |
+| Accessibility | `accessibilityLabel` `accessibilityHint` |
 
 `font` takes a preset (`'largeTitle'`, `'title'`, `'title2'`, `'title3'`, `'headline'`, `'body'`, `'caption'`, `'mono'`), a size, or `{ size, weight, italic, family }`.
+
+Presets follow each platform's own type scale: the Fluent type ramp on Windows (`body` 14, `title` 28, `caption` 12) and the system text styles on macOS (`body` 13, `title` 22, `caption` 10). Pass a size to get the same number on both.
 
 Colors can be `'#RRGGBB'`, a name such as `'red'`, or a theme keyword like `'accent'`, `'primary'`, `'secondary'`, `'card'` or `'danger'`. Theme keywords follow light and dark mode.
 
@@ -234,6 +278,8 @@ Window options go in the first argument to `App`:
 App({ title: 'Notes', width: 900, height: 640, backdrop: 'mica', theme: 'system' }, body)
 ```
 
+A new window puts keyboard focus on its first control. Set `autoFocus: false` to open with nothing focused and no focus ring.
+
 `backdrop` is `'mica'`, `'micaAlt'`, `'acrylic'` or `'none'`, and `theme` is `'system'`, `'light'` or `'dark'`, and you can change it at runtime through `system.window.theme`.
 
 ## Any WinUI control
@@ -267,6 +313,7 @@ glasspane examples/counter.js   # state, buttons, text field, toggle, slider
 glasspane examples/todo.js      # keyed lists, universal icons, dialogs, save picker
 glasspane examples/photos.js    # glass sidebar & search pill, menus, cornerRadiusMultiplier, universal icons
 glasspane examples/gallery.js   # every control, Native views, ZStack
+glasspane examples/views.js     # tabs, split view, menus, grid, pickers, shapes, popovers, sheets
 glasspane examples/windows.js   # several windows, shared state, per-window dialogs
 glasspane examples/platform.js  # system.platform and one file per OS
 ```

@@ -1,9 +1,8 @@
 const fs = require('node:fs');
 const {
-  App, state, system, VStack, HStack, Text, Icon, Button, TextField, Checkbox, ScrollView, ForEach, Divider, Spacer,
+  App, state, system, VStack, HStack, Text, Icon, Button, TextField, Checkbox, ScrollView, ForEach, Spacer,
 } = require('..');
-
-const R = system.cornerRadiusMultiplier;
+const { R, chrome, top, panel } = require('./style');
 
 let nextId = 3;
 const todos = state([
@@ -24,22 +23,22 @@ async function save() {
   if (path) fs.writeFileSync(path, JSON.stringify(todos.value, null, 2));
 }
 
-App({ title: 'Todos', width: 520, height: 600 }, () => {
+App({ title: 'Todos', width: 520, height: 600, ...chrome }, () => {
   const remaining = todos.value.filter((t) => !t.done).length;
   return VStack(
     HStack(
       Icon('check').font(24).foreground('accent'),
       Text('Todos').font('largeTitle'),
-    ).alignment('center').spacing(10),
-    HStack(
+    ).alignment('center').spacing(8),
+    panel(HStack(
       TextField('What needs doing?', draft).onSubmit(add).flex(),
       Button('Add', add).icon('add').style('accent'),
-    ).alignment('center'),
-    ScrollView(
+    ).alignment('center')),
+    panel(ScrollView(
       VStack(
         ...ForEach(todos.value, (t) =>
           HStack(
-            Checkbox(t.text, t.done).onChange((v) => { t.done = v; }).flex(),
+            Checkbox(t.text, t.done).onChange((v) => { t.done = v; }).flex().hAlign('start'),
             Button('', async () => {
               if (await system.confirm(`Delete "${t.text}"?`, { title: 'Delete todo', ok: 'Delete' })) {
                 todos.value = todos.value.filter((x) => x.id !== t.id);
@@ -47,13 +46,11 @@ App({ title: 'Todos', width: 520, height: 600 }, () => {
             }).icon('delete').tooltip('Delete'),
           ).padding({ x: 8, y: 4 }).cornerRadius(12 * R)),
       ).alignment('stretch').spacing(4),
-    ).flex(),
-    Divider(),
+    )).flex(),
     HStack(
       Text(`${remaining} left`).foreground('secondary'),
       Spacer(),
       Button('Save…', save).icon('save'),
-    ),
-  ).alignment('stretch').spacing(12).padding(24);
+    ).padding({ horizontal: 8 }),
+  ).alignment('stretch').spacing(12).padding({ top: top + 12, horizontal: 16, bottom: 16 });
 });
-

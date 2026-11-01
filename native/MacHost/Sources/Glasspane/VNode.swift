@@ -12,6 +12,8 @@ struct VNode {
     var props: JSONDict
     var events: [String: String]
     var children: [VNode]
+    /// Views hung off this one: `contextMenu` (several), `popover` and `sheet` (one).
+    var overlays: [String: [VNode]] = [:]
 
     init(_ raw: JSONDict) {
         type = raw["t"] as? String ?? "Text"
@@ -19,6 +21,10 @@ struct VNode {
         props = raw["p"] as? JSONDict ?? [:]
         events = raw["e"] as? [String: String] ?? [:]
         children = (raw["c"] as? [JSONDict] ?? []).map { VNode($0) }
+        for (name, value) in raw["o"] as? JSONDict ?? [:] {
+            if let one = value as? JSONDict { overlays[name] = [VNode(one)] }
+            else if let many = value as? [JSONDict] { overlays[name] = many.map { VNode($0) } }
+        }
     }
 
     func str(_ k: String) -> String? { props[k] as? String }
@@ -35,6 +41,12 @@ struct VNode {
             return EdgeInsets(top: v[1], leading: v[0], bottom: v[3], trailing: v[2])
         }
         return nil
+    }
+
+    func without(_ keys: String?...) -> VNode {
+        var copy = self
+        for k in keys { if let k = k { copy.props[k] = nil } }
+        return copy
     }
 
     /// Fills in props the node did not set, for views with built-in styling (Card).

@@ -4,9 +4,9 @@
 // state and settings. The process stays alive until the last window closes.
 
 const { App, state, system } = require('../lib/index.js');
-const { VStack, HStack, Text, Icon, Button, Card, Spacer, Divider } = require('../lib/view.js');
+const { VStack, HStack, Text, Icon, Button, Spacer } = require('../lib/view.js');
+const { chrome, top, panel } = require('./style');
 
-const R = system.cornerRadiusMultiplier;
 const count = state(0);
 const log = state([]);
 
@@ -14,7 +14,7 @@ const note = (line) => log.update((lines) => [line, ...lines].slice(0, 6));
 
 // ---- main window -----------------------------------------------------------
 
-App({ title: 'Windows', width: 560, height: 460 }, () =>
+App({ title: 'Windows', width: 560, height: 460, ...chrome }, () =>
   VStack(
     HStack(
       Icon('newWindow').font(18).foreground('accent'),
@@ -23,24 +23,22 @@ App({ title: 'Windows', width: 560, height: 460 }, () =>
     Text(`Count is ${count.value}`).font('title3').foreground('accent'),
 
     HStack(
-      Button('-1', () => count.update((n) => n - 1)).icon('minus'),
-      Button('+1', () => count.update((n) => n + 1)).icon('plus').style('accent'),
+      Button('', () => count.update((n) => n - 1)).icon('minus').tooltip('Decrement'),
+      Button('', () => count.update((n) => n + 1)).icon('plus').tooltip('Increment').style('accent'),
       Spacer(),
-      Button('Open a window', () => openInspector()).icon('newWindow').style('accent'),
+      Button('Open window…', () => openInspector()).icon('newWindow').style('accent'),
     ).spacing(8),
 
-    Divider(),
-
-    Card(
+    panel(VStack(
       Text('Recent activity').font('headline'),
       ...(log.value.length
         ? log.value.map((line) => Text(line).font('caption').foreground('secondary'))
         : [Text('Nothing yet').font('caption').foreground('disabled')]),
-    ).cornerRadius(18 * R),
+    ).alignment('leading').spacing(4).fillWidth()),
 
     Spacer(),
     HStack(Button('Quit everything', () => system.quit()).icon('close')).hAlign('end'),
-  ).spacing(14).padding(24)
+  ).spacing(12).padding({ top: top + 16, horizontal: 24, bottom: 24 })
 );
 
 // ---- a second, independent window ------------------------------------------
@@ -48,7 +46,7 @@ App({ title: 'Windows', width: 560, height: 460 }, () =>
 function openInspector() {
   const draft = state('');
 
-  const win = App({ title: 'Inspector', width: 420, height: 320, backdrop: 'acrylic' }, () =>
+  const win = App({ title: 'Inspector', width: 420, height: 320, ...chrome }, () =>
     VStack(
       HStack(
         Icon('info').font(16).foreground('accent'),
@@ -64,7 +62,7 @@ function openInspector() {
       Spacer(),
       HStack(
         // Dialogs on the handle belong to this window, so Windows parents them to it.
-        Button('Alert here', async () => {
+        Button('Alert here…', async () => {
           await win.alert('This alert is parented to the inspector window.');
           note('inspector alert dismissed');
         }).icon('bell'),
@@ -75,7 +73,7 @@ function openInspector() {
           win.close();
         }).icon('close'),
       ).spacing(8),
-    ).spacing(12).padding(20)
+    ).spacing(12).padding({ top: top + 16, horizontal: 20, bottom: 20 })
   );
 
   win.window.title = `Inspector #${count.value + 1}`;

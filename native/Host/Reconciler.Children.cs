@@ -33,6 +33,7 @@ public sealed partial class Reconciler
     void ApplyChildren(UIElement el, string t, JsonObject p, JsonArray? c, Meta m)
     {
         var nodes = c?.Select(n => (JsonObject)n!).ToList() ?? new List<JsonObject>();
+        if (ApplySharedChildren(el, t, p, nodes, m)) return;
         switch (el)
         {
             case Grid g when t is "VStack" or "HStack" or "ZStack":

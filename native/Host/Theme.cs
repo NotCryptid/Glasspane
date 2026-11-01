@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json.Nodes;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Markup;
@@ -29,6 +30,9 @@ static class Theme
         ["danger"] = "SystemFillColorCritical",
         ["success"] = "SystemFillColorSuccess",
         ["warning"] = "SystemFillColorCaution",
+        // Hover and press fills for borderless buttons. Not part of the documented palette.
+        ["subtleFill"] = "SubtleFillColorSecondary",
+        ["subtleFillPressed"] = "SubtleFillColorTertiary",
     };
 
     static readonly Dictionary<string, Color> Named = new(StringComparer.OrdinalIgnoreCase)
@@ -68,6 +72,30 @@ static class Theme
         else if (ParseColor(spec) is { } c) b = new SolidColorBrush(c);
         if (b != null) Cache[cacheKey] = b;
         return b;
+    }
+
+    /// <summary>A color string, or a LinearGradient object from JS.</summary>
+    public static Brush? BrushFrom(JsonNode? spec, bool forText = false)
+    {
+        if (spec is JsonObject o && o["gradient"] is JsonObject g) return Gradient(g);
+        if (spec is JsonValue v && v.TryGetValue<string>(out var s)) return Brush(s, forText);
+        return null;
+    }
+
+    static Brush? Gradient(JsonObject g)
+    {
+        static Windows.Foundation.Point At(JsonNode? n) =>
+            n is JsonArray a && a.Count == 2 ? new Windows.Foundation.Point(a[0]!.GetValue<double>(), a[1]!.GetValue<double>()) : new Windows.Foundation.Point(0.5, 0);
+        var brush = new LinearGradientBrush { StartPoint = At(g["start"]), EndPoint = At(g["end"]) };
+        foreach (var stop in (g["stops"] as JsonArray)?.OfType<JsonObject>() ?? Enumerable.Empty<JsonObject>())
+        {
+            // Theme keywords stop at the color they have right now; a gradient cannot follow a theme change.
+            var spec = J.Str(stop, "color") ?? "";
+            Color? c = ParseColor(spec);
+            if (c == null && Keywords.TryGetValue(spec, out var key) && Application.Current.Resources.TryGetValue(key, out var found) && found is Color fc) c = fc;
+            if (c != null) brush.GradientStops.Add(new GradientStop { Color = c.Value, Offset = J.Num(stop, "at") ?? 0 });
+        }
+        return brush.GradientStops.Count >= 2 ? brush : null;
     }
 
     static Brush? _glass;

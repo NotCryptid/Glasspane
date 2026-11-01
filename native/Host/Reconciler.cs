@@ -22,6 +22,16 @@ sealed class Meta
     public double? CornerRadius;
         public bool WiredSize;
     public bool WiredTap;
+    public bool WiredShapeSize;
+    public bool WiredHover;
+    public bool WiredDoubleTap;
+    public string? ContextSig;
+    public string? MenuSig;
+    public string? ButtonStyle;
+    public string? Shortcut;
+    public Flyout? Popover;
+    public ContentDialog? Dialog;
+    public bool HostClosing;
 }
 
 /// <summary>
@@ -48,6 +58,8 @@ public sealed partial class Reconciler
         {
             "Native" => "Native:" + J.Str(p, "type"),
             "ProgressView" => "ProgressView:" + (J.Str(p, "style") ?? "bar"),
+            "Picker" => "Picker:" + (J.Str(p, "style") ?? "menu"),
+            "DatePicker" => "DatePicker:" + (J.Str(p, "mode") ?? "date"),
             _ => t,
         };
     }
@@ -81,6 +93,19 @@ public sealed partial class Reconciler
             };
         }
 
+        if (!m.WiredHover && m.Events.ContainsKey("hover"))
+        {
+            m.WiredHover = true;
+            el.PointerEntered += (_, _) => Fire(el, "hover", true);
+            el.PointerExited += (_, _) => Fire(el, "hover", false);
+        }
+        if (!m.WiredDoubleTap && m.Events.ContainsKey("doubleTap"))
+        {
+            m.WiredDoubleTap = true;
+            el.IsDoubleTapEnabled = true;
+            el.DoubleTapped += (_, e) => { Fire(el, "doubleTap", null); e.Handled = true; };
+        }
+
         var t = J.Str(node, "t") ?? "Text";
         var p = node["p"] as JsonObject ?? new JsonObject();
         m.Updating = true;
@@ -89,6 +114,7 @@ public sealed partial class Reconciler
             if (m.Props == null || !JsonNode.DeepEquals(m.Props, p)) ApplyProps(el, t, p, m);
             if (!HoldInputs) ApplyValue(el, t, p);
             ApplyChildren(el, t, p, node["c"] as JsonArray, m);
+            ApplyOverlays(el, node, p, m);
             m.Props = p;
         }
         finally { m.Updating = false; }
@@ -116,7 +142,7 @@ public sealed partial class Reconciler
             case "Toggle": el = new ToggleSwitch(); break;
             case "Checkbox": el = new CheckBox(); break;
             case "Slider": el = new Slider(); break;
-            case "Picker": el = new ComboBox(); break;
+            case "Picker": el = CreatePicker(node["p"]); break;
             case "Stepper": el = new NumberBox { SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline }; break;
             case "ProgressView":
                 el = J.Str(node["p"], "style") == "ring" ? new ProgressRing() : new ProgressBar { Maximum = 1 };
@@ -124,7 +150,9 @@ public sealed partial class Reconciler
             case "Image": el = new Image(); break;
             case "Icon": el = new Border(); break;
             case "Native": el = CreateNative(J.Str(node["p"], "type")); break;
-            default: throw new InvalidOperationException("Unknown view type: " + t);
+            default:
+                el = CreateShared(t, node["p"]) ?? throw new InvalidOperationException("Unknown view type: " + t);
+                break;
         }
         el.IsDoubleTapEnabled = false;
         M(el).TypeKey = tk;
@@ -167,6 +195,7 @@ public sealed partial class Reconciler
                 nb.ValueChanged += (_, e) => { if (!double.IsNaN(e.NewValue)) Fire(nb, "change", e.NewValue); };
                 break;
             case ListView lv: lv.SelectionChanged += (_, _) => Fire(lv, "select", lv.SelectedIndex); break;
+            default: WireShared(el); break;
         }
     }
 }

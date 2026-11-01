@@ -151,7 +151,15 @@ public sealed class HostApp : Application, IXamlMetadataProvider
             Bridge.Log("render failed: " + e);
             Bridge.Send(new JsonObject { ["type"] = "error", ["window"] = id, ["message"] = e.Message });
         }
-        if (!hw.Shown) { hw.Shown = true; hw.Window.Activate(); }
+        if (!hw.Shown)
+        {
+            hw.Shown = true;
+            hw.Window.Activate();
+            // WinUI leaves focus unset until the user acts; autoFocus (on unless turned off) puts it on the first control.
+            if ((msg["config"] as JsonObject) is not { } cfg || J.Bool(cfg, "autoFocus") != false)
+                hw.Window.DispatcherQueue.TryEnqueue(() =>
+                    (Microsoft.UI.Xaml.Input.FocusManager.FindFirstFocusableElement(hw.Body) as Control)?.Focus(FocusState.Programmatic));
+        }
     }
 
     void ApplyWindow(HostWindow hw, JsonObject w)
