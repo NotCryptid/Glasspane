@@ -48,7 +48,7 @@ You need macOS 27 or newer, [Node.js](https://nodejs.org) 20 or newer, and Xcode
 ```
 npm install @cryptidbleh/glasspane
 npx @cryptidbleh/glasspane app.js
-npx glasspane pack app.js -n MyApp      # writes dist/MyApp.app
+npx glasspane pack app.js -n MyApp      # writes ./MyApp.app
 ```
 
 `pack` writes a `.app` bundle with the SwiftUI host, a copy of `node` and your project. The bundle is signed ad hoc, which is enough to run on the Mac that built it. Before you give it to other people, sign it with a Developer ID and notarize it. Glasspane does neither. Bundle the `node` from nodejs.org (set `GLASSPANE_NODE`), because a Homebrew `node` links libraries that other Macs lack. Icons are `.icns` files, or a `.png` that `pack` converts with `sips`. `--id com.you.app` sets the bundle identifier.
@@ -110,9 +110,9 @@ npx glasspane pack app.js -n MyApp -i icon.png    // the packaged exe or .app
 npx glasspane pack app.js -n MyApp
 ```
 
-This writes `dist/MyApp/`, which holds `MyApp.exe`, the WinUI host, a copy of `node.exe`, and an `app/` copy of your project including `node_modules`. Zip the folder and ship it. Users need neither Node nor .NET, and `MyApp.exe` runs on a double-click.
+This writes `./MyApp/` in the folder you ran it from, which holds `MyApp.exe`, the WinUI host, a copy of `node.exe`, and an `app/` copy of your project including `node_modules`. Zip the folder and ship it. Users need neither Node nor .NET, and `MyApp.exe` runs on a double-click.
 
-Options: `-o <dir>` sets the output folder, `-n <name>` sets the exe name (default: `productName` or `name` from package.json), and `-i <icon.png>` sets the icon.
+Options: `-o <dir>` sets the output folder (relative to where you ran the command, or absolute), `-n <name>` sets the exe name (default: `productName` or `name` from package.json), and `-i <icon.png>` sets the icon.
 
 The result is a folder because WinUI and the Node runtime have to sit next to the exe. The bundled `node.exe` is about 90 MB, which is most of the folder. Run `npm install --omit=dev` in your project first so dev dependencies stay out of the package.
 
@@ -121,7 +121,7 @@ The result is a folder because WinUI and the Node runtime have to sit next to th
 Use one square PNG, 512 px or larger, for every platform (see Icons below). Existing `.ico` files work too. To change the icon of an exe you already packaged:
 
 ```
-npx glasspane icon dist/MyApp/MyApp.exe icon.png
+npx glasspane icon MyApp/MyApp.exe icon.png
 ```
 
 That changes the file icon shown in Explorer, pinned taskbar entries and shortcuts using pure-JS `resedit` (no native binary required).

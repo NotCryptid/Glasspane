@@ -5,7 +5,7 @@ const { startInHost, ensureHost } = require('../lib/launch');
 
 const [cmd, ...rest] = process.argv.slice(2);
 if (!cmd || cmd === '--help' || cmd === '-h') {
-  console.log('usage: glasspane <app.js> [args...]\n       glasspane build                          build the host\n       glasspane pack <app.js> [-o dir] [-n name] [-i icon.png]   package the app as a standalone <name>.exe folder (Windows) or <name>.app (macOS)\n       glasspane icon <app.exe> <icon.png>      change the icon of an exe (Windows)');
+  console.log('usage: glasspane <app.js> [args...]\n       glasspane build                          build the host\n       glasspane pack <app.js> [-o dir] [-n name] [-i icon.png]   package the app as a standalone <name> folder with <name>.exe (Windows) or <name>.app (macOS) in the current folder, or in -o\n       glasspane icon <app.exe> <icon.png>      change the icon of an exe (Windows)');
   process.exit(cmd ? 0 : 2);
 }
 if (cmd === 'build') {
