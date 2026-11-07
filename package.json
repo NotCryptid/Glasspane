@@ -17,7 +17,8 @@
   "files": [
     "bin",
     "lib",
-    "scripts",
+    "scripts/build-host.js",
+    "scripts/test.sh",
     "index.d.ts",
     "ICONS.md",
     "native/Host/*.cs",
