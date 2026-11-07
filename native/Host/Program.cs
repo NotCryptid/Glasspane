@@ -23,6 +23,14 @@ public static class Program
             MessageBoxW(IntPtr.Zero, "This app needs Windows 11 25H2 (build 26200) or newer.", "Unsupported Windows version", 0x10);
             Environment.Exit(1);
         }
+        // WebView2 keeps its profile next to the exe by default, which fails when the app is installed
+        // somewhere read-only. Put it under the user's local app data instead.
+        if (Environment.GetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER") == null)
+        {
+            var app = Path.GetFileNameWithoutExtension(Environment.ProcessPath) ?? "Glasspane";
+            Environment.SetEnvironmentVariable("WEBVIEW2_USER_DATA_FOLDER",
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), app, "WebView2"));
+        }
         if (args.Length == 0)
         {
             // Packaged app: `glasspane pack` writes glasspane.json next to the exe.
