@@ -460,10 +460,14 @@ struct NodeView: View {
         case "Icon": Image(systemName: symbol(node.str("name") ?? ""))
         case "Divider": Divider()
         case "Native": native
-        case "WebView": WebPane(url: node.str("url"), html: node.str("html"))
+        // These have no size of their own, so without a frame they collapse to nothing in a stack.
+        case "WebView":
+            WebPane(url: node.str("url"), html: node.str("html"))
+                .frame(minWidth: 100, maxWidth: .infinity, minHeight: 100, maxHeight: .infinity)
         case "VideoPlayer":
             if let s = node.str("source"), let url = URL(string: s) {
                 VideoPane(url: url, autoplay: node.bool("autoplay") == true).id(url)
+                    .frame(minWidth: 100, maxWidth: .infinity, minHeight: 100, maxHeight: .infinity)
             }
         case "Label": label
         case "Link": link
