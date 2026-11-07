@@ -878,18 +878,22 @@ struct WebPane: NSViewRepresentable {
 }
 
 /// A video with transport controls. The caller gives it `.id(url)` so a new source gets a new player.
-struct VideoPane: View {
+/// This wraps AVPlayerView directly: SwiftUI's VideoPlayer aborts at runtime when it cannot load
+/// that class's metadata.
+struct VideoPane: NSViewRepresentable {
     let url: URL
     let autoplay: Bool
-    @State private var player: AVPlayer
 
-    init(url: URL, autoplay: Bool) {
-        self.url = url
-        self.autoplay = autoplay
-        _player = State(initialValue: AVPlayer(url: url))
+    func makeNSView(context: Context) -> AVPlayerView {
+        let view = AVPlayerView()
+        let player = AVPlayer(url: url)
+        view.player = player
+        view.controlsStyle = .inline
+        if autoplay { player.play() }
+        return view
     }
 
-    var body: some View {
-        VideoPlayer(player: player).onAppear { if autoplay { player.play() } }
-    }
+    func updateNSView(_ view: AVPlayerView, context: Context) {}
+
+    static func dismantleNSView(_ view: AVPlayerView, coordinator: ()) { view.player?.pause() }
 }
