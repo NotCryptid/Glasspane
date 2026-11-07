@@ -68,6 +68,11 @@ enum Theme {
             return UnitPoint(x: a.count > 0 ? a[0] : 0.5, y: a.count > 1 ? a[1] : 0)
         }
         guard stops.count >= 2 else { return nil }
+        if g["type"] as? String == "radial" {
+            let c = point(g["center"])
+            let r = CGFloat(doubleValue(g["radius"]) ?? 0.5)
+            return AnyShapeStyle(EllipticalGradient(stops: stops, center: c, startRadiusFraction: 0, endRadiusFraction: r))
+        }
         return AnyShapeStyle(LinearGradient(stops: stops, startPoint: point(g["start"]), endPoint: point(g["end"])))
     }
 }

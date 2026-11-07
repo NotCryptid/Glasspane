@@ -32,6 +32,7 @@ sealed class Meta
     public Flyout? Popover;
     public ContentDialog? Dialog;
     public bool HostClosing;
+    public string? MediaSig;
 }
 
 /// <summary>
@@ -149,6 +150,8 @@ public sealed partial class Reconciler
                 break;
             case "Image": el = new Image(); break;
             case "Icon": el = new Border(); break;
+            case "WebView": el = new WebView2(); break;
+            case "VideoPlayer": el = new MediaPlayerElement { AreTransportControlsEnabled = true }; break;
             case "Native": el = CreateNative(J.Str(node["p"], "type")); break;
             default:
                 el = CreateShared(t, node["p"]) ?? throw new InvalidOperationException("Unknown view type: " + t);

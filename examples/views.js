@@ -1,9 +1,11 @@
 // The views and modifiers that exist in both SwiftUI and WinUI: tabs, a split view, menus, a grid,
-// date and color pickers, shapes, gradients, popovers, sheets and context menus.
+// date and color pickers, shapes, gradients, popovers, sheets and context menus. The More tab has
+// Form and Section, Gauge, NavigationStack, LazyVStack, WebView, VideoPlayer and Native().fallback.
 const {
   App, state, system, VStack, HStack, ZStack, Text, Button, Label, Link, DatePicker, ColorPicker, SearchField,
   DisclosureGroup, TabView, Tab, SplitView, Menu, MenuItem, Divider, Grid, GridRow, Picker, ScrollView, List,
-  Rectangle, RoundedRectangle, Circle, Capsule, LinearGradient, Toggle,
+  Rectangle, RoundedRectangle, Circle, Capsule, LinearGradient, RadialGradient, Toggle,
+  Form, Section, Gauge, NavigationStack, LazyVStack, WebView, VideoPlayer, Native,
 } = require('..');
 const { R } = require('./style');
 
@@ -19,6 +21,12 @@ const showSheet = state(false);
 const hovered = state(false);
 const log = state('Nothing yet');
 const sections = ['Overview', 'Layout', 'Pickers'];
+const sync = state(true);
+const plan = state('Free');
+const used = state(200);
+const stack = state([]);
+const files = Array.from({ length: 500 }, (_, i) => `File ${i + 1}`);
+const push = (page) => stack.update((p) => { p.push(page); });
 
 const overview = () =>
   VStack(
@@ -81,6 +89,22 @@ const pickers = () =>
     Text(query.value ? `Searching for "${query.value}"` : 'Type to search').foreground('secondary'),
   ).spacing(12).alignment('leading').padding(20);
 
+const more = () =>
+  ScrollView(
+    Form(
+      Section('Account', Toggle('Sync', sync), Picker('Plan', plan, ['Free', 'Pro'])),
+      Section('Storage', Gauge('Disk', used, { min: 0, max: 512, format: (v) => `${v} GB` })),
+      RoundedRectangle(12).height(60).foreground(RadialGradient(['#ffc371', '#ff5f6d'], 'center', 0.7)),
+      // Windows only; macOS shows the fallback.
+      Native('RatingControl', { Value: 3 }).fallback(Text('3 stars')),
+      HStack(
+        Button('500 files', () => push(() => LazyVStack(files, (f) => Text(f)))),
+        Button('Web page', () => push(() => WebView({ html: '<h1>Hello from the web view</h1>' }))),
+        Button('Video', () => push(() => VideoPlayer('https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'))),
+      ).spacing(8),
+    ).padding(20),
+  );
+
 const pages = [overview, layout, pickers];
 
 App({ title: 'Views', width: 860, height: 640 }, () =>
@@ -93,5 +117,6 @@ App({ title: 'Views', width: 860, height: 640 }, () =>
         { sidebarWidth: 200 },
       ),
     ).icon('list'),
+    Tab('More', NavigationStack(stack, more, { title: 'More views' })).icon('settings'),
   )
 );

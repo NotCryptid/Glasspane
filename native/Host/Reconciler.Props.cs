@@ -249,6 +249,19 @@ public sealed partial class Reconciler
             case "Image":
                 ApplyImage((Image)el, p);
                 break;
+            case "List":
+            {
+                var lv = (ListView)el;
+                var plain = J.Bool(p, "plain") ?? false;
+                lv.SelectionMode = plain ? ListViewSelectionMode.None : ListViewSelectionMode.Single;
+                break;
+            }
+            case "WebView":
+                ApplyWebView((WebView2)el, p, m);
+                break;
+            case "VideoPlayer":
+                ApplyVideo((MediaPlayerElement)el, p, m);
+                break;
             case "Icon":
             {
                 var border = (Border)el;
@@ -459,6 +472,32 @@ public sealed partial class Reconciler
             foreach (var key in new[] { "ButtonForeground", "ButtonForegroundPointerOver", "ButtonForegroundPressed" })
                 b.Resources[key] = red;
         }
+    }
+
+    static async void ApplyWebView(WebView2 web, JsonObject p, Meta m)
+    {
+        var url = J.Str(p, "url");
+        var html = J.Str(p, "html");
+        var sig = url != null ? "u:" + url : "h:" + html;
+        if (m.MediaSig == sig) return;
+        m.MediaSig = sig;
+        try
+        {
+            await web.EnsureCoreWebView2Async();
+            if (m.MediaSig != sig) return;
+            if (url != null && Uri.TryCreate(url, UriKind.Absolute, out var uri)) web.Source = uri;
+            else if (html != null) web.NavigateToString(html);
+        }
+        catch (Exception e) { Console.Error.WriteLine("[glasspane] WebView failed: " + e.Message); }
+    }
+
+    static void ApplyVideo(MediaPlayerElement player, JsonObject p, Meta m)
+    {
+        var src = J.Str(p, "source");
+        if (m.MediaSig == src) return;
+        m.MediaSig = src;
+        player.AutoPlay = J.Bool(p, "autoplay") ?? false;
+        player.Source = src != null && Uri.TryCreate(src, UriKind.Absolute, out var uri) ? Windows.Media.Core.MediaSource.CreateFromUri(uri) : null;
     }
 
     static void ApplyImage(Image img, JsonObject p)

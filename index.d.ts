@@ -27,7 +27,7 @@ export function state<T>(initial: T): State<T>;
 export function Binding<T>(get: () => T, set: (v: T) => void): Bindable<T>;
 
 /** A color ramp for `background()` and `foreground()`. Make one with `LinearGradient`. */
-export interface Gradient { readonly gradient: { stops: Array<{ color: Color; at: number }>; start: [number, number]; end: [number, number] } }
+export interface Gradient { readonly gradient: { type?: 'radial'; stops: Array<{ color: Color; at: number }>; start?: [number, number]; end?: [number, number]; center?: [number, number]; radius?: number } }
 export type GradientPoint = 'top' | 'bottom' | 'leading' | 'trailing' | 'center' | 'topLeading' | 'topTrailing' | 'bottomLeading' | 'bottomTrailing' | [number, number];
 
 export type Child = View | string | number | null | undefined | false | Child[];
@@ -111,6 +111,8 @@ export class View {
   /** Subscribe to a WinUI event by name; most useful on Native views. */
   on(eventName: string, fn: (value?: any) => void): View;
   prop(name: string, value: unknown): View;
+  /** What to show where this view does not exist. A Native() control is WinUI only, so on macOS `view` is rendered instead. */
+  fallback(view: View): View;
   // per-view options
   spacing(n: number): View;
   alignment(a: Align | 'topLeading' | 'topTrailing' | 'bottomLeading' | 'bottomTrailing'): View;
@@ -205,7 +207,30 @@ export function Ellipse(): View;
 export function Capsule(): View;
 /** A color ramp for `background()` and `foreground()`. Stops are colors, or `{ color, at }` with `at` from 0 to 1. */
 export function LinearGradient(stops: Array<Color | { color: Color; at: number }>, from?: GradientPoint, to?: GradientPoint): Gradient;
-/** Any WinUI control by type name, e.g. Native('Expander', { Header: 'More' }, child). Windows only: it renders nothing on macOS. */
+/** A color ramp that radiates from a point. `radius` is a fraction of the view (0.5 reaches the nearest edge). */
+export function RadialGradient(stops: Array<Color | { color: Color; at: number }>, center?: GradientPoint, radius?: number): Gradient;
+
+/** A titled group of rows on a card, separated by dividers. */
+export function Section(title: string | null, ...rows: Child[]): View;
+/** A column of Sections. */
+export const Form: Stack;
+/**
+ * A stack of pages with a Back button. `pages` is a state holding functions that return a View.
+ * Push with `pages.update((p) => p.push(() => Detail()))`, pop with `pages.update((p) => p.pop())`.
+ */
+export function NavigationStack(pages: Bindable<Array<() => Child>>, root: () => Child, opts?: { title?: string; backLabel?: string }): View;
+/** A labeled level meter. `value` runs from `min` (default 0) to `max` (default 1). */
+export function Gauge(label: string, value: Bindable<number> | number, opts?: { min?: number; max?: number; format?: (v: number) => string }): View;
+/** A list that creates rows as they scroll into view. Rows are not selectable. */
+export function LazyVStack<T>(items: T[], render: (item: T, index: number) => Child, opts?: { key?: (item: T, i: number) => string | number }): View;
+export function LazyVStack(...children: Child[]): View;
+/** A web page from a URL, or from HTML. */
+export function WebView(url: string): View;
+export function WebView(source: { html: string }): View;
+/** A video with transport controls. `source` is a file path or a URL. */
+export function VideoPlayer(source: string, opts?: { autoplay?: boolean }): View;
+
+/** Any WinUI control by type name, e.g. Native('Expander', { Header: 'More' }, child). Windows only: it renders nothing on macOS unless you add `.fallback(view)`. */
 export function Native(type: string, props?: Record<string, unknown>, ...children: Child[]): View;
 
 export interface WindowOptions {

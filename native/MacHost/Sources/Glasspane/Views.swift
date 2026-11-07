@@ -1,5 +1,7 @@
 import SwiftUI
 import AppKit
+import AVKit
+import WebKit
 
 // MARK: - Layout helpers
 
@@ -458,6 +460,11 @@ struct NodeView: View {
         case "Icon": Image(systemName: symbol(node.str("name") ?? ""))
         case "Divider": Divider()
         case "Native": native
+        case "WebView": WebPane(url: node.str("url"), html: node.str("html"))
+        case "VideoPlayer":
+            if let s = node.str("source"), let url = URL(string: s) {
+                VideoPane(url: url, autoplay: node.bool("autoplay") == true).id(url)
+            }
         case "Label": label
         case "Link": link
         case "DatePicker": datePicker
@@ -517,9 +524,19 @@ struct NodeView: View {
                 model.emit(h, value ?? -1)
             }
         )
-        List(selection: selection) {
-            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
-                NodeView(node: item.node).tag(index)
+        if node.bool("plain") == true {
+            // A lazy column: rows are built as they scroll in and cannot be selected.
+            List {
+                ForEach(items, id: \.id) { item in
+                    NodeView(node: item.node).listRowSeparator(.hidden)
+                }
+            }
+            .listStyle(.plain)
+        } else {
+            List(selection: selection) {
+                ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                    NodeView(node: item.node).tag(index)
+                }
             }
         }
     }
@@ -828,5 +845,47 @@ struct NodeView: View {
         } else {
             VStack(alignment: .leading, spacing: 8) { kids(horizontal: false) }
         }
+    }
+}
+
+
+// MARK: - Web and video
+
+/// A web page from a URL or from HTML. It only reloads when the source changes.
+struct WebPane: NSViewRepresentable {
+    let url: String?
+    let html: String?
+
+    final class Coordinator { var loaded: String? }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> WKWebView { WKWebView() }
+
+    func updateNSView(_ view: WKWebView, context: Context) {
+        let sig = url.map { "u:" + $0 } ?? "h:" + (html ?? "")
+        guard context.coordinator.loaded != sig else { return }
+        context.coordinator.loaded = sig
+        if let s = url, let u = URL(string: s) {
+            if u.isFileURL { view.loadFileURL(u, allowingReadAccessTo: u.deletingLastPathComponent()) }
+            else { view.load(URLRequest(url: u)) }
+        } else if let h = html {
+            view.loadHTMLString(h, baseURL: nil)
+        }
+    }
+}
+
+/// A video with transport controls. The caller gives it `.id(url)` so a new source gets a new player.
+struct VideoPane: View {
+    let url: URL
+    let autoplay: Bool
+    @State private var player: AVPlayer
+
+    init(url: URL, autoplay: Bool) {
+        self.url = url
+        self.autoplay = autoplay
+        _player = State(initialValue: AVPlayer(url: url))
+    }
+
+    var body: some View {
+        VideoPlayer(player: player).onAppear { if autoplay { player.play() } }
     }
 }

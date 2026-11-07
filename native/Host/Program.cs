@@ -17,10 +17,10 @@ public static class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        // Windows 11 24H2 is build 26100. The manifest cannot express a build number, so check here.
-        if (Environment.OSVersion.Version.Build < 26100)
+        // Windows 11 25H2 is build 26200. The manifest cannot express a build number, so check here.
+        if (Environment.OSVersion.Version.Build < 26200)
         {
-            MessageBoxW(IntPtr.Zero, "This app needs Windows 11 24H2 (build 26100) or newer.", "Unsupported Windows version", 0x10);
+            MessageBoxW(IntPtr.Zero, "This app needs Windows 11 25H2 (build 26200) or newer.", "Unsupported Windows version", 0x10);
             Environment.Exit(1);
         }
         if (args.Length == 0)

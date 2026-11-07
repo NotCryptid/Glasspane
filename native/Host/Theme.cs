@@ -86,16 +86,24 @@ static class Theme
     {
         static Windows.Foundation.Point At(JsonNode? n) =>
             n is JsonArray a && a.Count == 2 ? new Windows.Foundation.Point(a[0]!.GetValue<double>(), a[1]!.GetValue<double>()) : new Windows.Foundation.Point(0.5, 0);
-        var brush = new LinearGradientBrush { StartPoint = At(g["start"]), EndPoint = At(g["end"]) };
+        var radial = J.Str(g, "type") == "radial";
+        var linear = new LinearGradientBrush { StartPoint = At(g["start"]), EndPoint = At(g["end"]) };
+        var round = new RadialGradientBrush
+        {
+            Center = At(g["center"]), GradientOrigin = At(g["center"]),
+            RadiusX = J.Num(g, "radius") ?? 0.5, RadiusY = J.Num(g, "radius") ?? 0.5,
+        };
+        IList<GradientStop> stops = radial ? round.GradientStops : linear.GradientStops;
         foreach (var stop in (g["stops"] as JsonArray)?.OfType<JsonObject>() ?? Enumerable.Empty<JsonObject>())
         {
             // Theme keywords stop at the color they have right now; a gradient cannot follow a theme change.
             var spec = J.Str(stop, "color") ?? "";
             Color? c = ParseColor(spec);
             if (c == null && Keywords.TryGetValue(spec, out var key) && Application.Current.Resources.TryGetValue(key, out var found) && found is Color fc) c = fc;
-            if (c != null) brush.GradientStops.Add(new GradientStop { Color = c.Value, Offset = J.Num(stop, "at") ?? 0 });
+            if (c != null) stops.Add(new GradientStop { Color = c.Value, Offset = J.Num(stop, "at") ?? 0 });
         }
-        return brush.GradientStops.Count >= 2 ? brush : null;
+        if (stops.Count < 2) return null;
+        return radial ? round : linear;
     }
 
     static Brush? _glass;

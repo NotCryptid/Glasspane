@@ -1,6 +1,7 @@
 const {
   App, state, system, VStack, HStack, ZStack, Text, Icon, Button, TextField, SecureField, TextEditor, Toggle,
   Slider, Stepper, Picker, ProgressView, Spinner, List, ScrollView, Native,
+  Form, Section, Gauge, LazyVStack, WebView,
 } = require('..');
 const { R, chrome, top, panel } = require('./style');
 const fruit = state('Banana');
@@ -31,6 +32,7 @@ App({ title: 'Gallery', width: 760, height: 720, ...chrome }, () =>
         ProgressView(progress.value / 100).width(320),
         Slider(progress, { min: 0, max: 100 }).width(320),
         HStack(Spinner().width(24).height(24), Text('Working…').foreground('secondary')),
+        Gauge('Battery', progress.value / 100, { format: (v) => `${Math.round(v * 100)}%` }).width(320),
       ).alignment('leading').spacing(8).fillWidth()),
 
       panel(VStack(
@@ -40,10 +42,24 @@ App({ title: 'Gallery', width: 760, height: 720, ...chrome }, () =>
       ).alignment('leading').spacing(8).fillWidth()),
 
       panel(VStack(
+        HStack(Icon('settings').foreground('accent'), Text('Form and Section').font('title3')).spacing(8),
+        Form(
+          Section('Account', Toggle('Sync', state(true)), Picker('Plan', fruit, ['Apple', 'Banana', 'Cherry'])),
+          Section('Notes', Text('Rows sit on one card with dividers between them.')),
+        ),
+      ).alignment('leading').spacing(8).fillWidth()),
+
+      panel(VStack(
+        HStack(Icon('list').foreground('accent'), Text('LazyVStack and WebView').font('title3')).spacing(8),
+        LazyVStack(Array.from({ length: 1000 }, (_, i) => `Row ${i + 1}`), (t) => Text(t)).height(120),
+        WebView({ html: '<body style="font-family:sans-serif"><h3>A web view</h3><p>Rendered by WebView2 or WKWebView.</p></body>' }).height(120),
+      ).alignment('leading').spacing(8).fillWidth()),
+
+      panel(VStack(
         HStack(Icon('settings').foreground('accent'), Text('Native escape hatch').font('title3')).spacing(8),
         Native('Expander', { Header: 'Any WinUI control works', IsExpanded: true },
           Text('This is a Microsoft.UI.Xaml.Controls.Expander created by name.').padding(8)),
-        Native('RatingControl', { Value: 3 }).on('ValueChanged', (v) => console.log('rating', v)),
+        Native('RatingControl', { Value: 3 }).on('ValueChanged', (v) => console.log('rating', v)).fallback(Text('3 stars (macOS fallback)')),
         Native('HyperlinkButton', { Content: 'glasspane on GitHub' }).on('Click', () => system.launch('https://github.com')),
       ).alignment('leading').spacing(8).fillWidth()),
 

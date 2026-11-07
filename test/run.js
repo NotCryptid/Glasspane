@@ -38,6 +38,7 @@ const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g
   await test('png icons convert for each platform');
   await test('menus resolve for the hosts');
   await test('the shared swiftui and winui views serialize and route events');
+  await test('the composed views serialize and navigate');
   await test('a menu click reaches its handler and the menu follows state');
   await test('handler ids are namespaced per window');
   await test('events route to the window that raised them');
@@ -52,6 +53,7 @@ const slug = (s) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g
   await test('the process exits when the last window closes');
   await test('system reports the platform');
   await test('universal icons resolve for each platform');
+  await test('pack compiles folder without script parameter');
 
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
